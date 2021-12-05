@@ -1,0 +1,27 @@
+Package: hcs
+Title: R package for pro Halo data.
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Tony",
+           family = "ElHabr",
+           role = c("aut", "cre"),
+           email = "anthonyelhabr@gmail.com")
+Description: An R package for pro Halo data.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.2
+Imports: 
+    magrittr,
+    rlang (>= 0.1.2),
+    dplyr,
+    tidyr,
+    tibble,
+    stringr,
+    rvest,
+    purrr
+Suggests: 
+    roxygen2
+Depends: 
+    R (>= 2.10)
