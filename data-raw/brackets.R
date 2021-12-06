@@ -196,6 +196,7 @@ urls <-
 
 brackets <- urls %>% 
   map_dfr(scrape_bracket)
+use_data(brackets, internal = FALSE, overwrite = TRUE)
 
 all_matches <- brackets %>% 
   select(event_name, matches) %>% 
@@ -211,10 +212,12 @@ all_teams <- bind_rows(
   summarize(across(n, sum)) %>% 
   ungroup() %>% 
   arrange(desc(n)) %>% 
-  mutate(region = 'North America')
+  mutate(region = 'North America') %>% 
+  select(region, team, n_matches = n)
 all_teams
-use_data(all_teams, internal = FALSE)
+use_data(all_teams, internal = FALSE, overwrite = TRUE)
 
+# eda ----
 redux_matches <- bind_rows(
   all_matches %>% 
     rename(
@@ -233,6 +236,7 @@ redux_matches <- bind_rows(
     across(c(w, l), as.integer)
   )
 
+
 agg_matches <- redux_matches %>% 
   group_by(team, map, mode) %>% 
   summarize(
@@ -244,25 +248,3 @@ agg_matches <- redux_matches %>%
     w_prop = w / n
   )
 agg_matches %>% arrange(desc(n))
-
-agg_matches %>% 
-  filter(n >= 4) %>% 
-  group_by(map, mode) %>% 
-  slice_max(w_prop, n = 1, with_ties = FALSE) %>% 
-  ungroup() %>% 
-  arrange(desc(w_prop))
-
-all_matches %>% 
-  filter(missing_result | lag(missing_result))
-redux_matches %>% 
-  filter(
-    team == 'OpTic Gaming',
-    map == 'Aquarius',
-    mode == 'Capture The Flag'
-  )
-
-redux_matches %>% 
-  filter(
-    opponent == 'OpTic Gaming',
-    team == 'Sentinels'
-  )
