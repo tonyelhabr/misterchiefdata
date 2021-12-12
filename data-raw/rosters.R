@@ -9,9 +9,12 @@ library(rlang)
 library(tidyr)
 library(lubridate)
 
+scrape_time <- now()
+old_all_rosters <- data('all_rosters')
+
 get_team_url <- function(team_name) {
-  case_when(
-    team_name == 'KC Pioneers' ~ 'Kansas_City_Pioneers'
+  team_name <- case_when(
+    team_name == 'KC Pioneers' ~ 'Kansas_City_Pioneers',
     team_name == 'Spacestation' ~ 'Spacestation_Gaming',
     TRUE ~ str_replace_all(team_name, ' ', '_')
   )
@@ -86,11 +89,12 @@ scrape_roster <- function(team_url) {
 possibly_scrape_roster <- possibly(scrape_roster, otherwise = tibble())
 rosters <- team_urls %>% 
   # head(3) %>% 
-  head(10) %>% 
+  # head(20) %>% 
   mutate(
     roster = map(team_url, possibly_scrape_roster)
   )
 rosters
+
 clean_date <- function(x, which) {
   str_remove_all(x, sprintf('^%s\\sDate[:]\\s|\\[[0-9]+\\]$', str_to_title(which))) %>% ymd()
 }
@@ -104,8 +108,9 @@ all_rosters <- rosters %>%
     status = table_name %>% str_replace_all('(^.*)(\\s.*$)', '\\1') %>% tolower(),
     across(name, ~str_remove_all(.x, '^\\(|\\)')),
     position,
-    across(join_date, ~clean_date(.x, 'join')),
+    across(join_date, ~clean_date(.x, 'join')), # warnings with g2 are fine
     across(leave_date, ~clean_date(.x, 'leave'))
   )
-all_rosters %>% count(team, sort = TRUE)
-  
+
+all_rosters$scrape_time <- scrape_time
+usethis::use_data(all_rosters, internal = FALSE, overwrite = TRUE)  
