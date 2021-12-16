@@ -88,8 +88,6 @@ scrape_roster <- function(team_url) {
 
 possibly_scrape_roster <- possibly(scrape_roster, otherwise = tibble())
 rosters <- team_urls %>% 
-  # head(3) %>% 
-  # head(20) %>% 
   mutate(
     roster = map(team_url, possibly_scrape_roster)
   )
