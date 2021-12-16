@@ -6,7 +6,11 @@ library(rvest)
 library(janitor)
 library(purrr)
 library(tidyr)
+library(lubridate)
 library(usethis)
+
+scrape_time <- now()
+data('all_tourneys')
 
 get_event_url <- function(year = 2021, split = 1, region = 'North_America', series_type = 'Open_Series', index = 1) {
   
@@ -181,21 +185,21 @@ scrape_bracket <- function(url) {
     )
 }
 
-urls <- 
-  c(
-    1:2 %>% 
-      map_chr(
-        ~get_event_url(
-          year = 2021, split = 1, region = 'North_America', series_type = 'Open_Series', index = .x 
-        )
-      ),
-    get_event_url(
-      year = 2021, split = 1, region = 'North_America', series_type = 'Kickoff_Major'
-    )
-  )
+bracket_urls <- all_tourneys %>%
+  filter(region == 'United States' | region == 'North America', tier == 'C') %>%
+  select(tier, name, url, start_date, end_date, location, first_place, second_place) %>% 
+  filter(!is.na(second_place)) %>% 
+  arrange(desc(start_date)) %>% 
+  slice(c(5:7)) %>% 
+  select(url)
 
-brackets <- urls %>% 
-  map_dfr(scrape_bracket)
+possibly_scrape_bracket <- possibly(scrape_bracket, otherwise = tibble(), quiet = FALSE)
+brackets <- bracket_urls %>% 
+  mutate(bracket = map(url, possibly_scrape_bracket))
+
+all_brackets <- brackets %>% 
+  unnest(bracket)
+
 use_data(brackets, internal = FALSE, overwrite = TRUE)
 
 all_matches <- brackets %>% 
