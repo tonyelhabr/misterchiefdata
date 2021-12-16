@@ -48,7 +48,8 @@ scrape_time <- now()
 #   'StrongSide',
 #   'Tsquared'
 # )
-all_rosters <- data('all_rosters')
+
+data('all_rosters')
 all_ids <- all_rosters %>% 
   # we may miss out on some old players who have turned into something other than coaches in the future,
   # but this logic works as of 2021-12-10

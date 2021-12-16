@@ -8,9 +8,12 @@ library(usethis)
 library(rlang)
 library(tidyr)
 library(lubridate)
+library(usethis)
 
 scrape_time <- now()
-old_all_rosters <- data('all_rosters')
+data('all_rosters')
+old_all_rosters <- all_rosters
+rm('all_rosters')
 
 get_team_url <- function(team_name) {
   team_name <- case_when(
