@@ -114,4 +114,4 @@ all_rosters <- rosters %>%
   )
 
 all_rosters$scrape_time <- scrape_time
-usethis::use_data(all_rosters, internal = FALSE, overwrite = TRUE)  
+use_data(all_rosters, internal = FALSE, overwrite = TRUE)  

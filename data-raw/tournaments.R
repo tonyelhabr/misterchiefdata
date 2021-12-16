@@ -158,4 +158,4 @@ all_tourneys <- tourneys %>%
   unnest(tourney)
 
 all_tourneys$scrape_time <- scrape_time
-usethis::use_data(all_tourneys, internal = FALSE, overwrite = TRUE)  
+use_data(all_tourneys, internal = FALSE, overwrite = TRUE)  
