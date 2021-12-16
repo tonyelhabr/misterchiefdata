@@ -12,37 +12,6 @@ library(usethis)
 scrape_time <- now()
 data('all_tourneys')
 
-get_event_url <- function(year = 2021, split = 1, region = 'North_America', series_type = 'Open_Series', index = 1) {
-  
-  base_url <- 'https://liquipedia.net/halo/Halo_Championship_Series'
-  if(series_type == 'Open_Series') {
-    
-    # 'https://liquipedia.net/halo/Halo_Championship_Series/2021-22/Split_1/North_America/Open_Series/1',
-    year <- sprintf('%s-%s', year, str_sub(as.integer(year) + 1, 3, 4))
-    
-    url <- sprintf(
-      '%s/%s/Split_%s/%s/%s/%s',
-      base_url,
-      year,
-      split,
-      region,
-      series_type,
-      index
-    )
-    
-  } else if (series_type == 'Kickoff_Major') {
-    # 'https://liquipedia.net/halo/Halo_Championship_Series/2021/Kickoff_Major/North_America'
-    url <- sprintf(
-      '%s/%s/%s/%s',
-      base_url,
-      year,
-      series_type,
-      region
-    )
-  }
-  url
-}
-
 .get_team_names <- function(series_element) {
   names <- series_element %>% html_elements('.name')
   idx_team_names <- names %>% html_attr('style') %>% str_which('overflow:hidden;text-overflow:ellipsis;white-space:pre')
@@ -186,23 +155,29 @@ scrape_bracket <- function(url) {
 }
 
 bracket_urls <- all_tourneys %>%
-  filter(region == 'United States' | region == 'North America', tier == 'C') %>%
-  select(tier, name, url, start_date, end_date, location, first_place, second_place) %>% 
-  filter(!is.na(second_place)) %>% 
-  arrange(desc(start_date)) %>% 
-  slice(c(5:7)) %>% 
-  select(url)
+  filter(region == 'United States' | region == 'North America') %>%
+  filter(!(is.na(first_place) & is.na(second_place))) %>% 
+  arrange(desc(start_date)) # %>% 
+  # select(tier, region, name, url, start_date, end_date, first_place, second_place)
 
 possibly_scrape_bracket <- possibly(scrape_bracket, otherwise = tibble(), quiet = FALSE)
 brackets <- bracket_urls %>% 
   mutate(bracket = map(url, possibly_scrape_bracket))
 
 all_brackets <- brackets %>% 
+  select(url, bracket) %>% 
   unnest(bracket)
 
-use_data(brackets, internal = FALSE, overwrite = TRUE)
+## where were there errors?
+bracket_urls %>% 
+  anti_join(
+    all_brackets %>% 
+      select(url)
+  )
 
-all_matches <- brackets %>% 
+use_data(all_brackets, internal = FALSE, overwrite = TRUE)
+
+all_matches <- all_brackets %>% 
   select(event_name, matches) %>% 
   unnest(matches)
 
