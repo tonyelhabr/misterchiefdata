@@ -88,10 +88,10 @@ parse_series_matches <- function(series_element) {
   
   matches_wide %>% 
     mutate(
-      # there are some cases when a game 1 or 2 is missing, and a later result in the series is not missing
-      # a series always has a row for all possible matches, so we can infer if a game should have a result
-      # by first checking if the match index is less than the total possible number of matches divided by 2
-      # and rounded up, or by checking if a later game has a result
+      ## there are some cases when a game 1 or 2 is missing, and a later result in the series is not missing
+      ## a series always has a row for all possible matches, so we can infer if a game should have a result
+      ## by first checking if the match index is less than the total possible number of matches divided by 2
+      ## and rounded up, or by checking if a later game has a result
       missing_result = case_when(
         match < ceiling(n_matches / 2) & is.na(winner) ~ TRUE,
         !is.na(!!first_match_w_result) & match < !!first_match_w_result ~ TRUE,
@@ -110,9 +110,16 @@ parse_infobox <- function(page) {
     pluck(1) %>% 
     html_text2() %>% 
     ## remove "[e][h]" before "HCS..."
-    str_replace_all('\\[.*\\]H', 'H')
+    str_remove_all('\\[[eh]\\]')
   labels_and_values <- infobox_element %>% html_elements('.infobox-cell-2') %>% html_text2()
   n_text <- length(labels_and_values)
+  
+  ## if there is an odd number for some reason, take off the last value (e.g. https://liquipedia.net/halo/Halo_5_Pro_Series/Season_1/North_America/Championship)
+  if((n_text %% 2) == 1) { 
+    n_text <- n_text - 1
+    labels_and_values <- labels_and_values[1:(length(n_text) - 1)]
+  }
+  
   idx_labels <- seq(1, n_text, by = 2)
   idx_values <- seq(2, n_text, by = 2)
   
@@ -120,6 +127,8 @@ parse_infobox <- function(page) {
     label = labels_and_values[idx_labels] %>% str_remove('[:]$'),
     value = labels_and_values[idx_values] %>% str_trim() %>% str_replace_all('\\n', ', ')
   ) %>% 
+    ## resolves case found with https://liquipedia.net/halo/Halo_5_Pro_Series/Season_4/North_America/Championship
+    filter(label != '') %>% 
     pivot_wider(
       names_from = label,
       values_from = value
@@ -134,7 +143,13 @@ scrape_bracket <- function(url) {
   page <- url %>% read_html()
   body <- page %>% html_element('body')
   infobox <- parse_infobox(page)
-  bracket_elements <- page %>% html_elements('.brkts-match.brkts-match-popup-wrapper.brkts-match-has-details')
+  bracket_elements <- page %>% html_elements('.brkts-match.brkts-match-popup-wrapper')
+  
+  if(length(bracket_elements) == 0) {
+    return(
+      infobox
+    )
+  }
   
   do_possibly_map_dfr <- function(f) {
     possibly_f <- possibly(f, otherwise = tibble())
@@ -157,10 +172,10 @@ scrape_bracket <- function(url) {
 bracket_urls <- all_tourneys %>%
   filter(region == 'United States' | region == 'North America') %>%
   filter(!(is.na(first_place) & is.na(second_place))) %>% 
-  arrange(desc(start_date)) # %>% 
-  # select(tier, region, name, url, start_date, end_date, first_place, second_place)
+  arrange(desc(start_date))
 
 possibly_scrape_bracket <- possibly(scrape_bracket, otherwise = tibble(), quiet = FALSE)
+
 brackets <- bracket_urls %>% 
   mutate(bracket = map(url, possibly_scrape_bracket))
 
@@ -169,34 +184,57 @@ all_brackets <- brackets %>%
   unnest(bracket)
 
 ## where were there errors?
-bracket_urls %>% 
-  anti_join(
-    all_brackets %>% 
-      select(url)
-  )
+# bad_urls <- bracket_urls %>%
+#   anti_join(
+#     all_brackets %>%
+#       select(url),
+#     by = 'url'
+#   )
 
+all_brackets$scrape_time <- scrape_time
 use_data(all_brackets, internal = FALSE, overwrite = TRUE)
+
+all_series <- all_brackets %>% 
+  select(event_name, series) %>% 
+  unnest(series)
+all_series
 
 all_matches <- all_brackets %>% 
   select(event_name, matches) %>% 
   unnest(matches)
+all_matches
 
-all_teams <- bind_rows(
-  all_matches %>%
-    count(team = home_team),
-  all_matches %>%
-    count(team = away_team)
-) %>%
-  group_by(team) %>%
-  summarize(across(n, sum)) %>% 
-  ungroup() %>% 
-  arrange(desc(n)) %>% 
-  mutate(region = 'North America') %>% 
-  select(region, team, n_matches = n)
-all_teams
-use_data(all_teams, internal = FALSE, overwrite = TRUE)
+distinctly_pull_teams <- function(df) {
+  bind_rows(
+    df %>%
+      count(team = home_team),
+    df %>%
+      count(team = away_team)
+  ) %>%
+    group_by(team) %>%
+    summarize(across(n, sum)) %>% 
+    ungroup() %>% 
+    arrange(desc(n)) %>% 
+    mutate(region = 'North America') %>% 
+    select(region, team, n)
+}
+
+all_series_teams <- all_series %>% distinctly_pull_teams() %>% rename(n_series = n)
+all_matches_teams <- all_matches %>% distinctly_pull_teams() %>% rename(n_matches = n)
+
+use_data(all_series_teams, internal = FALSE, overwrite = TRUE)
+use_data(all_matches_teams, internal = FALSE, overwrite = TRUE)
 
 # eda ----
+data('all_rosters')
+all_rosters %>% 
+  filter(id == 'aPG' | id == 'aPureGangster')
+data('all_players')
+all_players %>% 
+  filter(id == 'aPG') %>% 
+  unnest(results)
+all_rosters %>% 
+  filter(team == 'TOX Gaming')
 redux_matches <- bind_rows(
   all_matches %>% 
     rename(
@@ -215,9 +253,8 @@ redux_matches <- bind_rows(
     across(c(w, l), as.integer)
   )
 
-
 agg_matches <- redux_matches %>% 
-  group_by(team, map, mode) %>% 
+  group_by(team, game, map, mode) %>% 
   summarize(
     n = n(),
     across(c(w, l), ~sum(.x, na.rm = TRUE))

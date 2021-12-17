@@ -66,12 +66,14 @@ scrape_tournament <- function(url) {
   
   ## scrape ----
   page <- url %>% read_html()
-  tourney_nodes <- page %>% html_elements('.divTable.table-full-width.tournament-card')
-  name_nodes <- tourney_nodes %>% html_elements('.divCell.Tournament.Header') %>% html_elements('b')
-  names <- name_nodes %>% html_text2()
-  links <- name_nodes %>% html_elements('a') %>% html_attr('href')
+  tourney_elements <- page %>% html_elements('.divTable.table-full-width.tournament-card')
+  header_elements <- tourney_elements %>% html_elements('.divCell.Tournament.Header')
+  games <- header_elements %>% map_chr(~.x %>% html_element('a') %>% html_attr('title'))
+  name_elements <- header_elements %>% html_elements('b')
+  names <- name_elements %>% html_text2()
+  links <- name_elements %>% html_elements('a') %>% html_attr('href')
   extract_text <- function(x) {
-    tourney_nodes %>% html_elements(sprintf('.divCell.%s', x)) %>% html_text2() %>% str_trim()
+    tourney_elements %>% html_elements(sprintf('.divCell.%s', x)) %>% html_text2() %>% str_trim()
   }
   dates <- extract_text('EventDetails-Left-55.Header')
   prizes <- extract_text('EventDetails-Right-45.Header')
@@ -81,7 +83,7 @@ scrape_tournament <- function(url) {
   second_place_abbrvs <- extract_text('Placement.SecondPlace')
   
   extract_title <- function(x) {
-    els <- tourney_nodes %>% 
+    els <- tourney_elements %>% 
       html_elements(sprintf('.divCell.Placement.%sPlace', x))
     
     els %>% 
@@ -99,7 +101,7 @@ scrape_tournament <- function(url) {
   first_place_names <- extract_title('First')
   second_place_names <- extract_title('Second')
   
-  regions <- tourney_nodes %>% 
+  regions <- tourney_elements %>% 
     html_elements('.divCell.EventDetails-Left-60.Header') %>% 
     html_elements('.flag > a') %>% 
     html_attr('title')
@@ -124,6 +126,7 @@ scrape_tournament <- function(url) {
   tourneys <-
     tibble(
       name = names,
+      game = games,
       url = sprintf('https://liquipedia.net%s', links),
       start_date = start_dates,
       end_date = end_dates,
@@ -153,6 +156,7 @@ possibly_scrape_tournament <- possibly(scrape_tournament, otherwise = tibble(), 
 tourneys <- tourney_urls %>% 
   mutate(tourney = map(url, possibly_scrape_tournament))
 tourneys
+
 all_tourneys <- tourneys %>%
   select(tier, tourney) %>% 
   unnest(tourney)
