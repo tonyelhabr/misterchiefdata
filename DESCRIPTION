@@ -22,9 +22,10 @@ Imports:
     rvest,
     purrr,
     httr,
-    janitor
-Suggests: 
-    roxygen2,
+    janitor,
+    arrow,
     lubridate
+Suggests: 
+    roxygen2
 Depends: 
-    R (>= 2.10)
+    R (>= 4.0)
