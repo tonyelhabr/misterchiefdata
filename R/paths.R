@@ -1,5 +1,5 @@
 
-path_tourneys <- 'data/tourneys.parquet'
+path_tournaments <- 'data/tournaments.parquet'
 path_brackets <- 'data/brackets.rds'
 path_teams <- 'data/teams.parquet'
 path_rosters <- 'data/rosters.parquet'

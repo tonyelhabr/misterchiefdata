@@ -1,14 +1,12 @@
 
-
 suppressPackageStartupMessages(suppressWarnings({
   library(dplyr)
-  library(purrr)
   library(stringr)
-  library(rvest)
-  library(janitor)
-  library(rlang)
-  library(tidyr)
   library(lubridate)
+  library(cli)
+  library(rvest)
+  library(purrr)
+  library(janitor)
   library(scales)
   library(arrow)
 }))
@@ -124,6 +122,7 @@ possibly_scrape_roster <- purrr::possibly(
     return(NA_character_)
   }
   team <- el %>% rvest::html_attr('data-highlightingclass')
+  ## turns out that these urls are bogus, so don't rely on them (some of them may work, but not all of them)
   link <- el %>% rvest::html_element('a') %>% rvest::html_attr('href')
   if(!is.na(link)) {
     url <- sprintf('https://liquipedia.net%s', link)
@@ -134,19 +133,6 @@ possibly_scrape_roster <- purrr::possibly(
     url = url
   )
 }
-
-.scrape_team_url <- function(element) {
-  el <- .scrape_team_template_element(element)
-  if(length(el) == 0) {
-    return(NA_character_)
-  }
-  link <- el %>% rvest::html_element('a') %>% rvest::html_attr('href')
-  if(is.na(link)) {
-    return(NA_character_)
-  }
-  sprintf('https://liquipedia.net%s', link)
-}
-
 
 scrape_latest_transfers <- function() {
   t <- lubridate::today()
@@ -202,7 +188,7 @@ scrape_latest_transfers <- function() {
   
 }
 
-do_scrape_rosters <- function(brackets, scrape_time = lubridate::now(), overwrite = TRUE) {
+do_scrape_rosters <- function(brackets, scrape_time, overwrite = TRUE) {
   
   cli::cli_alert_info('Scraping rosters.')
   
@@ -210,7 +196,7 @@ do_scrape_rosters <- function(brackets, scrape_time = lubridate::now(), overwrit
   
   if(!rosters_exist) {
     cli::cli_alert_info(
-      sprintf('%s does not exists! Must scrape all rosters.', path_rosters)
+      sprintf('%s does not exist! Must scrape all rosters.', path_rosters)
     )
   }
   

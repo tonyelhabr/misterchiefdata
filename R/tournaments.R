@@ -1,12 +1,11 @@
 
 suppressPackageStartupMessages(suppressWarnings({
   library(dplyr)
-  library(stringr)
-  library(purrr)
-  library(tidyr)
   library(lubridate)
+  library(stringr)
+  library(cli)
   library(rvest)
-  library(rlang)
+  library(purrr)
   library(arrow)
 }))
 
@@ -14,12 +13,12 @@ suppressPackageStartupMessages(suppressWarnings({
 .coalesce_tourney_date <- function(date) {
   date %>% 
     strptime('%b %d, %Y', tz = 'UTC') %>% 
-    ymd()
+    lubridate::ymd()
 }
 
 .str_replace_tourney_date <- function(date, which = c('start', 'end')) {
   
-  has_dash <- str_detect(date, '[-]')
+  has_dash <- stringr::str_detect(date, '[-]')
   if(!has_dash) {
     return(date)
   }
@@ -100,8 +99,8 @@ scrape_tournament <- function(tier = .get_valid_tournament_tiers()) {
   if(tier == 'Recent') {
     titles_init <- titles_init %>% 
       ## make it just S instead of S-Tier or S-Tier Tournaments
-      str_remove('[-]Tier') %>% 
-      str_remove(' Tournaments')
+      stringr::str_remove('[-]Tier') %>% 
+      stringr::str_remove(' Tournaments')
   }
   tourney_elements <- page %>% rvest::html_elements('.divTable.table-full-width.tournament-card')
   
@@ -190,7 +189,7 @@ scrape_tournament <- function(tier = .get_valid_tournament_tiers()) {
   first_place_abbrvs <- first_place_abbrvs %>% .clean_abbrv()
   second_place_abbrvs <- second_place_abbrvs %>% .clean_abbrv()
   
-  tourneys <-
+  tournaments <-
     tibble::tibble(
       title = titles,
       name = names,
@@ -210,7 +209,7 @@ scrape_tournament <- function(tier = .get_valid_tournament_tiers()) {
       first_place_has_page = first_place_has_page,
       second_place_has_page = second_place_has_page
     )
-  tourneys
+  tournaments
 }
 
 possibly_scrape_tournament <- purrr::possibly(
@@ -227,57 +226,57 @@ possibly_scrape_tournament <- purrr::possibly(
   )
 )
 
-do_scrape_tournaments <- function(scrape_time = lubridate::now(), overwrite = FALSE) {
+do_scrape_tournaments <- function(scrape_time, overwrite = FALSE) {
   
   cli::cli_alert_info('Scraping tournaments.')
   
   letter_tiers <- c('S', 'A', 'B', 'C')
-  tourneys_exist <- file.exists(path_tourneys)
+  tournaments_exist <- file.exists(path_tournaments)
   
-  if(!tourneys_exist) {
+  if(!tournaments_exist) {
     cli::cli_alert_info(
-      sprintf('%s does not exists! Must scrape all tournament urls.', path_tourneys)
+      sprintf('%s does not exist! Must scrape all tournament urls.', path_tournaments)
     )
   }
   
-  if(!tourneys_exist | overwrite) {
+  if(!tournaments_exist | overwrite) {
     
     cli::cli_alert_info(
       'Scraping all tournament urls.'
     )
     
-    tourneys <- letter_tiers %>% 
+    tournaments <- letter_tiers %>% 
       setNames(., .) %>% 
       purrr::map_dfr(possibly_scrape_tournament, .id = 'tier')
     
-    tourneys$scrape_time <- scrape_time
+    tournaments$scrape_time <- scrape_time
     
   } else {
-    existing_tourneys <- arrow::read_parquet(path_tourneys)
-    finished_tourneys <- existing_tourneys %>% 
+    existing_tournaments <- arrow::read_parquet(path_tournaments)
+    finished_tournaments <- existing_tournaments %>% 
       dplyr::filter(!(is.na(.data$first_place) | is.na(.data$second_place)))
-    future_tourneys <- existing_tourneys %>% 
+    future_tournaments <- existing_tournaments %>% 
       dplyr::filter(.data$end_date > !!scrape_time)
-    other_tourneys <- existing_tourneys %>% 
+    other_tournaments <- existing_tournaments %>% 
       dplyr::anti_join(
         dplyr::bind_rows(
-          finished_tourneys %>% dplyr::distinct(.data$url),
-          future_tourneys %>% dplyr::distinct(.data$url)
+          finished_tournaments %>% dplyr::distinct(.data$url),
+          future_tournaments %>% dplyr::distinct(.data$url)
         ),
         by = 'url'
       )
-    if(nrow(other_tourneys) > 0) {
+    if(nrow(other_tournaments) > 0) {
       cli::cli_alert_warning(
         'At least one tournament cannot be classified as finished or in the future:'
       )
       purrr::walk(
-        other_tourneys$url,
+        other_tournaments$url,
         cli::cli_li
       )
     }    
     
-    recent_tourneys <- possibly_scrape_tournament('Recent')
-    new_recent_tourneys <- recent_tourneys %>% 
+    recent_tournaments <- possibly_scrape_tournament('Recent')
+    new_recent_tournaments <- recent_tournaments %>% 
       dplyr::filter(title %in% !!letter_tiers) %>% 
       dplyr::distinct(tier = .data$title, .data$url) %>% 
       dplyr::anti_join(
@@ -285,42 +284,42 @@ do_scrape_tournaments <- function(scrape_time = lubridate::now(), overwrite = FA
         by = 'url'
       ) %>%
       dplyr::anti_join(
-        finished_tourneys %>% 
+        finished_tournaments %>% 
           dplyr::distinct(.data$tier, .data$url),
         by = 'url'
       )
     
-    if(nrow(new_recent_tourneys) == 0) {
+    if(nrow(new_recent_tournaments) == 0) {
       cli::cli_alert_info(
         'No new tournaments to scrape.'
       )
-      return(existing_tourneys)
+      return(existing_tournaments)
     }
     
     cli::cli_alert_info(
       'At least one new tournament to scrape:\n',
     )
     purrr::walk(
-      new_recent_tourneys$url,
+      new_recent_tournaments$url,
       cli::cli_li
     )
-    distinct_tiers <- new_recent_tourneys %>% distinct(tier)
-    new_tourneys <- distinct_tiers %>% 
+    distinct_tiers <- new_recent_tournaments %>% distinct(tier)
+    new_tournaments <- distinct_tiers %>% 
       setNames(., .) %>% 
       purrr::map_dfr(possibly_scrape_tournament, .id = 'tier') %>% 
-      dplyr::filter(.data$url %in% new_recent_tourneys$url)
+      dplyr::filter(.data$url %in% new_recent_tournaments$url)
     
-    new_tourneys$scrape_time <- scrape_time
-    tourneys <- dplyr::bind_rows(
-      new_tourneys,
-      existing_tourneys %>% 
-        dplyr::filter(!(.data$url %in% new_recent_tourneys$url))
+    new_tournaments$scrape_time <- scrape_time
+    tournaments <- dplyr::bind_rows(
+      new_tournaments,
+      existing_tournaments %>% 
+        dplyr::filter(!(.data$url %in% new_recent_tournaments$url))
     )
 
   }
   
-  arrow::write_parquet(tourneys, path_tourneys)
+  arrow::write_parquet(tournaments, path_tournaments)
   cli::cli_alert_success('Done scraping tournaments.')
-  tourneys
+  tournaments
 }
 

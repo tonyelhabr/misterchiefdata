@@ -1,15 +1,13 @@
 
 suppressPackageStartupMessages(suppressWarnings({
   library(dplyr)
-  library(stringr)
-  library(purrr)
   library(rvest)
-  library(janitor)
-  library(purrr)
+  library(stringr)
+  library(tibble)
   library(tidyr)
-  library(lubridate)
+  library(purrr)
+  library(janitor)
   library(readr)
-  library(arrow)
 }))
 
 .get_team_names <- function(series_element) {
@@ -223,7 +221,7 @@ possibly_scrape_bracket <- purrr::possibly(
   quiet = TRUE
 )
 
-do_scrape_brackets <- function(tourneys, scrape_time = lubridate::now(), overwrite = FALSE) {
+do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
   
   cli::cli_alert_info('Scraping brackets.')
   
@@ -231,7 +229,7 @@ do_scrape_brackets <- function(tourneys, scrape_time = lubridate::now(), overwri
   
   if(!brackets_exist) {
     cli::cli_alert_info(
-      sprintf('%s does not exists! Must scrape all brackets.', path_brackets)
+      sprintf('%s does not exist! Must scrape all brackets.', path_brackets)
     )
   }
   
@@ -241,7 +239,7 @@ do_scrape_brackets <- function(tourneys, scrape_time = lubridate::now(), overwri
       'Scraping all brackets.'
     )
     
-    bracket_urls <- tourneys %>%
+    bracket_urls <- tournaments %>%
       dplyr::filter(.data$region == 'United States' | .data$region == 'North America') %>%
       dplyr::filter(!(is.na(.data$first_place) & is.na(.data$second_place))) %>% 
       dplyr::arrange(dplyr::desc(.data$start_date))
@@ -252,7 +250,7 @@ do_scrape_brackets <- function(tourneys, scrape_time = lubridate::now(), overwri
     brackets$scrape_time <- scrape_time
   } else {
     existing_brackets <- readr::read_rds(path_brackets)
-    new_urls <- tourneys %>% dplyr::filter(.data$scrape_time == !!scrape_time)
+    new_urls <- tournaments %>% dplyr::filter(.data$scrape_time == !!scrape_time)
     
     if(nrow(new_urls) == 0) {
       cli::cli_alert_success(
@@ -277,122 +275,4 @@ do_scrape_brackets <- function(tourneys, scrape_time = lubridate::now(), overwri
   cli::cli_alert_success('Done scraping brackets.')
   brackets
   
-}
-
-.distinctly_select_teams <- function(data) {
-  n_tournaments <- dplyr::bind_rows(
-    series %>%
-      dplyr::distinct(team = .data$home_team, .data$url),
-    series %>%
-      dplyr::distinct(team = .data$away_team, .data$url)
-  ) %>%
-    dplyr::distinct(.data$team, .data$url) %>% 
-    dplyr::count(.data$team, name = 'n_tournaments', sort = TRUE)
-  
-  n <- dplyr::bind_rows(
-    data %>%
-      dplyr::count(team = .data$home_team),
-    data %>%
-      dplyr::count(team = .data$away_team)
-  ) %>%
-    dplyr::group_by(.data$team) %>%
-    dplyr::summarize(
-      dplyr::across(.data$n, sum)
-    ) %>% 
-    dplyr::ungroup() %>% 
-    dplyr::arrange(desc(.data$n)) %>% 
-    dplyr::select(.data$team, .data$n)
-  
-  dplyr::full_join(
-    n_tournaments,
-    n,
-    by = 'team'
-  )
-}
-
-do_extract_teams <- function(brackets, scrape_time = lubridate::now(), overwrite = TRUE) {
-  
-  cli::cli_alert_info('Extracting teams.')
-  
-  teams_exist <- file.exists(path_teams)
-  
-  if(teams_exist) {
-    old_teams <- arrow::read_parquet(path_teams)
-  }
-  
-  if(teams_exist & !overwrite) {
-    cli::cli_alert_info(
-      'Not updating team.'
-    )
-    return(old_teams)
-  }
-  
-  .select_unnest <- function(col) {
-    col <- rlang::enquo(col)
-    brackets %>% 
-      dplyr::select(.data$url, !!col) %>% 
-      tidyr::unnest(!!col)
-  }
-  
-  series <- .select_unnest(series)
-  matches <- .select_unnest(matches)
-  teams_init <- brackets %>% 
-    dplyr::select(tourney_url = .data$url, .data$teams) %>% 
-    tidyr::unnest(.data$teams) %>% 
-    dplyr::rename(team_url = .data$url, url = .data$tourney_url) %>% 
-    dplyr::count(team, team_url, name = 'n_tournaments', sort = TRUE)
-  
-
-  series_teams <- series %>% 
-    .distinctly_select_teams() %>% 
-    dplyr::rename(
-      n_series = .data$n, 
-      n_tournaments_w_series = .data$n_tournaments
-    )
-  
-  matches_teams <- matches %>% 
-    .distinctly_select_teams() %>% 
-    dplyr::select(
-      .data$team,
-      n_matches = .data$n
-    )
-  
-  teams <- teams_init %>% 
-    dplyr::full_join(
-      series_teams,
-      by = 'team'
-    ) %>% 
-    dplyr::full_join(
-      matches_teams,
-      by = 'team'
-    ) %>% 
-    dplyr::select(
-      .data$team,
-      .data$team_url,
-      .data$n_series,
-      .data$n_matches,
-      .data$n_tournaments,
-      .data$n_tournaments_w_series
-    )
-  
-  teams$scrape_time <- scrape_time
-  arrow::write_parquet(teams, path_teams)
-  
-  if(teams_exist) {
-    teams_join <- teams %>% 
-      dplyr::anti_join(
-        teams %>% dplyr::select(-.data$scrape_time),
-        old_teams %>% dplyr::select(-.data$scrape_time), 
-        by = c('team', 'team_url', 'n_series', 'n_matches', 'n_tournaments', 'n_tournaments_w_series')
-      )
-    
-    if(nrow(teams_join) > 0) {
-      cli::cli_alert_info(
-        'At least one difference detected between updated teams df and old teams df.'
-      )
-    }
-  }
-  
-  cli::cli_alert_success('Done extracting teams.')
-  teams
 }
