@@ -1,17 +1,17 @@
 
-suppressPackageStartupMessages(suppressWarnings({
-  library(dplyr)
-  library(cli)
-  library(arrow)
-  library(rlang)
-  library(tidyr)
-}))
+# suppressPackageStartupMessages(suppressWarnings({
+#   library(dplyr)
+#   library(cli)
+#   library(arrow)
+#   library(rlang)
+#   library(tidyr)
+# }))
 
 .distinctly_select_teams <- function(data) {
   n_tournaments <- dplyr::bind_rows(
-    series %>%
+    data %>%
       dplyr::distinct(team = .data$home_team, .data$url),
-    series %>%
+    data %>%
       dplyr::distinct(team = .data$away_team, .data$url)
   ) %>%
     dplyr::distinct(.data$team, .data$url) %>% 
@@ -28,7 +28,7 @@ suppressPackageStartupMessages(suppressWarnings({
       dplyr::across(.data$n, sum)
     ) %>% 
     dplyr::ungroup() %>% 
-    dplyr::arrange(desc(.data$n)) %>% 
+    dplyr::arrange(dplyr::desc(.data$n)) %>% 
     dplyr::select(.data$team, .data$n)
   
   dplyr::full_join(
@@ -55,23 +55,23 @@ do_update_teams <- function(brackets, update_time) {
       tidyr::unnest(!!col)
   }
   
-  series <- .select_unnest(series)
-  matches <- .select_unnest(matches)
+  series_results <- .select_unnest('series_results')
+  match_results <- .select_unnest('match_results')
   teams_init <- brackets %>% 
     dplyr::select(tourney_url = .data$url, .data$teams) %>% 
     tidyr::unnest(.data$teams) %>% 
     dplyr::rename(team_url = .data$url, url = .data$tourney_url) %>% 
-    dplyr::count(team, team_url, name = 'n_tournaments', sort = TRUE)
+    dplyr::count(.data$team, .data$team_url, name = 'n_tournaments', sort = TRUE)
   
   
-  series_teams <- series %>% 
+  series_teams <- series_results %>% 
     .distinctly_select_teams() %>% 
     dplyr::rename(
       n_series = .data$n, 
       n_tournaments_w_series = .data$n_tournaments
     )
   
-  matches_teams <- matches %>% 
+  matches_teams <- match_results %>% 
     .distinctly_select_teams() %>% 
     dplyr::select(
       .data$team,

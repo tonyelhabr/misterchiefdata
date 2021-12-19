@@ -1,14 +1,14 @@
 
-suppressPackageStartupMessages(suppressWarnings({
-  library(dplyr)
-  library(rvest)
-  library(stringr)
-  library(tibble)
-  library(tidyr)
-  library(purrr)
-  library(janitor)
-  library(readr)
-}))
+# suppressPackageStartupMessages(suppressWarnings({
+#   library(dplyr)
+#   library(rvest)
+#   library(stringr)
+#   library(tibble)
+#   library(tidyr)
+#   library(purrr)
+#   library(janitor)
+#   library(readr)
+# }))
 
 .get_team_names <- function(series_element) {
   names <- series_element %>% rvest::html_elements('.name')
@@ -150,8 +150,10 @@ suppressPackageStartupMessages(suppressWarnings({
     ) %>% 
     janitor::clean_names()
   
-  tibble::tibble('event_name' = title) %>% 
-    dplyr::mutate(info = list(info))
+  dplyr::bind_cols(
+    tibble::tibble(event_name = title),
+    info = info
+  )
 }
 
 .parse_teams <- function(page) {
@@ -173,7 +175,6 @@ suppressPackageStartupMessages(suppressWarnings({
 
 scrape_bracket <- function(url) {
   
-  
   cli::cli_alert_info(
     sprintf('Scraping bracket at %s.', url)
   )
@@ -183,10 +184,10 @@ scrape_bracket <- function(url) {
   teams <- .parse_teams(page)
   bracket_elements <- page %>% rvest::html_elements('.brkts-match.brkts-match-popup-wrapper')
   
-  tourney <- tibble::tibble(
-    infobox = list(infobox),
-    teams = list(teams)
-  )
+  tourney <- infobox %>% 
+    dplyr::mutate(
+      teams = list(teams)
+    )
   
   if(length(bracket_elements) == 0) {
     cli::cli_alert_warning(
@@ -210,8 +211,8 @@ scrape_bracket <- function(url) {
   series_results <- do_possibly_map_dfr(.parse_series_result)
   tourney %>% 
     dplyr::mutate(
-      series = list(series_results),
-      matches = list(series_matches)
+      series_results = list(series_results),
+      match_results = list(series_matches)
     )
 }
 
@@ -245,7 +246,7 @@ do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
       dplyr::arrange(dplyr::desc(.data$start_date))
     
     brackets <- bracket_urls$url %>% 
-      setNames(., .) %>% 
+      stats::setNames(., .) %>% 
       purrr::map_dfr(possibly_scrape_bracket, .id = 'url')
     brackets$scrape_time <- scrape_time
   } else {
@@ -260,7 +261,7 @@ do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
     }
     
     new_brackets <- new_urls$url %>% 
-      setNames(., .) %>% 
+      stats::setNames(., .) %>% 
       purrr::map_dfr(possibly_scrape_bracket, .id = 'url')
     
     new_brackets$scrape_time <- scrape_time

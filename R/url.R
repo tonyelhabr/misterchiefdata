@@ -10,12 +10,8 @@
 #' @source https://stackoverflow.com/questions/52911812/check-if-url-exists-in-r
 url_exists <- function(x, non_2xx_return_value = FALSE, quiet = FALSE,...) {
   
-  suppressPackageStartupMessages({
-    require("httr", quietly = FALSE, warn.conflicts = FALSE)
-  })
-
-  sHEAD <- safely(httr::HEAD)
-  sGET <- safely(httr::GET)
+  sHEAD <- purrr::safely(httr::HEAD)
+  sGET <- purrr::safely(httr::GET)
   
   # Try HEAD first since it's lightweight
   res <- sHEAD(x, ...)

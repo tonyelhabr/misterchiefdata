@@ -4,3 +4,8 @@
 ^dev$
 ^queries$
 ^LICENSE\.md$
+data/brackets.rds
+data/players.parquet
+data/rosters.parquet
+data/teams.parquet
+data/tournaments.parquet

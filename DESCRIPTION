@@ -1,6 +1,6 @@
-Package: hcs
-Title: R package for pro Halo data.
-Version: 0.0.0.9000
+Package: halo.data
+Title: R package for pro Halo data
+Version: 0.0.1
 Authors@R: 
     person(given = "Tony",
            family = "ElHabr",
@@ -19,8 +19,11 @@ Imports:
     lubridate,
     magrittr,
     purrr,
+    readr,
     rlang (>= 0.1.2),
     rvest,
+    scales,
+    stats,
     stringr,
     tibble,
     tidyr

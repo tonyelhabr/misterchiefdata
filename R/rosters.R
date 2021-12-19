@@ -1,15 +1,15 @@
 
-suppressPackageStartupMessages(suppressWarnings({
-  library(dplyr)
-  library(stringr)
-  library(lubridate)
-  library(cli)
-  library(rvest)
-  library(purrr)
-  library(janitor)
-  library(scales)
-  library(arrow)
-}))
+# suppressPackageStartupMessages(suppressWarnings({
+#   library(dplyr)
+#   library(stringr)
+#   library(lubridate)
+#   library(cli)
+#   library(rvest)
+#   library(purrr)
+#   library(janitor)
+#   library(scales)
+#   library(arrow)
+# }))
 
 
 .clean_roster_date <- function(x, which) {
@@ -73,7 +73,7 @@ scrape_roster <- function(url) {
     
     first_row <- table_init[1, ] %>% c() %>% unname() %>% unlist()
     tb <- table_init %>% 
-      setNames(first_row) %>% 
+      stats::setNames(first_row) %>% 
       dplyr::slice(c(2:dplyr::n())) %>% 
       janitor::clean_names() %>% 
       dplyr::mutate(
@@ -119,7 +119,7 @@ possibly_scrape_roster <- purrr::possibly(
 .scrape_team_info <- function(element) {
   el <- .scrape_team_template_element(element)
   if(length(el) == 0) {
-    return(NA_character_)
+    return(tibble::tibble(team = NA_character_, url = NA_character_))
   }
   team <- el %>% rvest::html_attr('data-highlightingclass')
   ## turns out that these urls are bogus, so don't rely on them (some of them may work, but not all of them)
@@ -153,7 +153,7 @@ scrape_latest_transfers <- function() {
   page <- url %>% rvest::read_html()
   
   .extract_row_elements <- function(suffix) {
-    page %>% 
+    row_elements <- page %>% 
       rvest::html_elements(sprintf('.divRow.mainpage-transfer-%s', suffix))
     
     dates <- row_elements %>% rvest::html_element('div.divCell.Date') %>% rvest::html_text2()
@@ -178,17 +178,17 @@ scrape_latest_transfers <- function() {
       new_teams %>% dplyr::rename(new_team = .data$team, new_team_url = .data$url)
     )
   }
-  
+
   transfers <- c(
+    'neutral',
     'to-team',
-    'from-team',
-    'netural'
+    'from-team'
   ) %>% 
     purrr::map_dfr(.extract_row_elements)
   
 }
 
-do_scrape_rosters <- function(brackets, scrape_time, overwrite = TRUE) {
+do_scrape_rosters <- function(teams, scrape_time, overwrite = TRUE) {
   
   cli::cli_alert_info('Scraping rosters.')
   
@@ -205,7 +205,7 @@ do_scrape_rosters <- function(brackets, scrape_time, overwrite = TRUE) {
     rosters <- teams %>% 
       dplyr::filter(!is.na(.data$team_url)) %>% 
       dplyr::pull(.data$team_url) %>% 
-      setNames(., .) %>% 
+      stats::setNames(., .) %>% 
       purrr::map_dfr(possibly_scrape_roster, .id = 'team_url')
     rosters$scrape_time <- scrape_time
   } else {
@@ -214,7 +214,7 @@ do_scrape_rosters <- function(brackets, scrape_time, overwrite = TRUE) {
       dplyr::slice_max(.data$scrape_time, n = 1, with_ties = FALSE) %>% 
       dplyr::ungroup()
     transfers <- scrape_latest_transfers()
-    
+
     new_transfers <- transfers %>% 
       dplyr::filter(.data$date > scrape_time)
     
@@ -222,6 +222,7 @@ do_scrape_rosters <- function(brackets, scrape_time, overwrite = TRUE) {
       cli::cli_alert_info(
         'No rosters to update since no transfers.'
       )
+      return(existing_rosters) 
     }
     
     teams_to_update <- dplyr::bind_rows(
@@ -233,7 +234,7 @@ do_scrape_rosters <- function(brackets, scrape_time, overwrite = TRUE) {
       dplyr::distinct(.data$team) %>% 
       dplyr::arrange(.data$team) %>% 
       dplyr::left_join(
-        team %>% dplyr::select(.data$team, .data$team_url),
+        teams %>% dplyr::select(.data$team, .data$team_url),
         by = 'team'
       )
     
@@ -249,14 +250,14 @@ do_scrape_rosters <- function(brackets, scrape_time, overwrite = TRUE) {
       
       new_rosters <- teams_to_update_w_urls %>% 
         dplyr::pull(.data$team_url) %>% 
-        setNames(., .) %>% 
+        stats::setNames(., .) %>% 
         purrr::map_dfr(possibly_scrape_roster, .id = 'team_url')
       
       new_rosters$scrape_time <- scrape_time
       
       rosters <- dplyr::bind_rows(
         new_rosters,
-        existing_rosters %>% dplyr::filter(!(team_url %in% teams_to_update_w_urls$team_url))
+        existing_rosters %>% dplyr::filter(!(.data$team_url %in% teams_to_update_w_urls$team_url))
       )
     }
     

@@ -1,14 +1,13 @@
 
-suppressPackageStartupMessages(suppressWarnings({
-  library(dplyr)
-  library(lubridate)
-  library(stringr)
-  library(cli)
-  library(rvest)
-  library(purrr)
-  library(arrow)
-}))
-
+# suppressPackageStartupMessages(suppressWarnings({
+#   library(dplyr)
+#   library(lubridate)
+#   library(stringr)
+#   library(cli)
+#   library(rvest)
+#   library(purrr)
+#   library(arrow)
+# }))
 
 .coalesce_tourney_date <- function(date) {
   date %>% 
@@ -171,7 +170,7 @@ scrape_tournament <- function(tier = .get_valid_tournament_tiers()) {
       ~.str_replace_tourney_date(.x, 'end')
     ) %>% 
     .coalesce_tourney_date()
-  is_multi_day <- dates %>% str_detect('[-]')
+  is_multi_day <- dates %>% stringr::str_detect('[-]')
   
   prizes <- prizes %>% 
     stringr::str_remove_all('[$,]') %>% 
@@ -246,7 +245,7 @@ do_scrape_tournaments <- function(scrape_time, overwrite = FALSE) {
     )
     
     tournaments <- letter_tiers %>% 
-      setNames(., .) %>% 
+      stats::setNames(., .) %>% 
       purrr::map_dfr(possibly_scrape_tournament, .id = 'tier')
     
     tournaments$scrape_time <- scrape_time
@@ -277,7 +276,7 @@ do_scrape_tournaments <- function(scrape_time, overwrite = FALSE) {
     
     recent_tournaments <- possibly_scrape_tournament('Recent')
     new_recent_tournaments <- recent_tournaments %>% 
-      dplyr::filter(title %in% !!letter_tiers) %>% 
+      dplyr::filter(.data$title %in% !!letter_tiers) %>% 
       dplyr::distinct(tier = .data$title, .data$url) %>% 
       dplyr::anti_join(
         .recent_tourney_ffa_urls,
@@ -303,9 +302,9 @@ do_scrape_tournaments <- function(scrape_time, overwrite = FALSE) {
       new_recent_tournaments$url,
       cli::cli_li
     )
-    distinct_tiers <- new_recent_tournaments %>% distinct(tier)
+    distinct_tiers <- new_recent_tournaments %>% dplyr::distinct(.data$tier)
     new_tournaments <- distinct_tiers %>% 
-      setNames(., .) %>% 
+      stats::setNames(., .) %>% 
       purrr::map_dfr(possibly_scrape_tournament, .id = 'tier') %>% 
       dplyr::filter(.data$url %in% new_recent_tournaments$url)
     
