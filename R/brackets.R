@@ -255,7 +255,7 @@ do_scrape_brackets <- function(tourneys, scrape_time = lubridate::now(), overwri
     new_urls <- tourneys %>% dplyr::filter(.data$scrape_time == !!scrape_time)
     
     if(nrow(new_urls) == 0) {
-      cli::cli_alert_info(
+      cli::cli_alert_success(
         'No new brackets to scrape.'
       )
       return(existing_brackets)
