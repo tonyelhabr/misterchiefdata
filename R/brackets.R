@@ -1,15 +1,4 @@
 
-# suppressPackageStartupMessages(suppressWarnings({
-#   library(dplyr)
-#   library(rvest)
-#   library(stringr)
-#   library(tibble)
-#   library(tidyr)
-#   library(purrr)
-#   library(janitor)
-#   library(readr)
-# }))
-
 .get_team_names <- function(series_element) {
   names <- series_element %>% rvest::html_elements('.name')
   idx_team_names <- names %>% 
