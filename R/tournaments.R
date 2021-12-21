@@ -1,14 +1,4 @@
 
-# suppressPackageStartupMessages(suppressWarnings({
-#   library(dplyr)
-#   library(lubridate)
-#   library(stringr)
-#   library(cli)
-#   library(rvest)
-#   library(purrr)
-#   library(arrow)
-# }))
-
 .coalesce_tourney_date <- function(date) {
   date %>% 
     strptime('%b %d, %Y', tz = 'UTC') %>% 

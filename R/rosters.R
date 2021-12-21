@@ -1,23 +1,9 @@
 
-# suppressPackageStartupMessages(suppressWarnings({
-#   library(dplyr)
-#   library(stringr)
-#   library(lubridate)
-#   library(cli)
-#   library(rvest)
-#   library(purrr)
-#   library(janitor)
-#   library(scales)
-#   library(arrow)
-# }))
-
-
 .clean_roster_date <- function(x, which) {
   x %>% 
     stringr::str_remove_all(sprintf('^%s\\sDate[:]\\s|\\[[0-9]+\\]$', stringr::str_to_title(which))) %>% 
     lubridate::ymd()
 }
-
 
 scrape_roster <- function(url) {
   team <- url %>% 
@@ -96,7 +82,7 @@ scrape_roster <- function(url) {
     purrr::map_dfr(pluck_table) %>% 
     dplyr::mutate(scrape_method = !!scrape_method) %>%  
     dplyr::transmute(
-      .data$id,
+      dplyr::across(.data$id, ~tolower(.x) %>% stringr::str_replace_all(' ', '_')),
       status = .data$table_name %>% stringr::str_replace_all('(^.*)(\\s.*$)', '\\1') %>% tolower(),
       dplyr::across(.data$name, ~stringr::str_remove_all(.x, '^\\(|\\)')),
       dplyr::across(.data$join_date, ~.clean_roster_date(.x, 'join')), # warnings with g2 are fine

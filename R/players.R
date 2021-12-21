@@ -1,17 +1,5 @@
 
 # mosesfps lan wins sheet: https://docs.google.com/spreadsheets/d/150bwdlGKysFJHEwYOv3f3JgGCx4gOEiFa-Jf3lSdkyg/edit#gid=1475647446
-#  suppressPackageStartupMessages(suppressWarnings({
-#   library(dplyr)
-#   library(stringr)
-#   library(cli)
-#   library(tibble)
-#   library(rvest)
-#   library(purrr)
-#   library(janitor)
-#   library(lubridate)
-#   library(arrow)
-# }))
-
 scrape_player <- function(id) {
   url <- sprintf(
     'https://liquipedia.net/halo/%s/Results', 

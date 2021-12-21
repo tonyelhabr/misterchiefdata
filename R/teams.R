@@ -1,12 +1,4 @@
 
-# suppressPackageStartupMessages(suppressWarnings({
-#   library(dplyr)
-#   library(cli)
-#   library(arrow)
-#   library(rlang)
-#   library(tidyr)
-# }))
-
 .distinctly_select_teams <- function(data) {
   n_tournaments <- dplyr::bind_rows(
     data %>%
