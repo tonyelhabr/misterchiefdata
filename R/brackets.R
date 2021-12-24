@@ -7,10 +7,10 @@
   names[idx_team_names] %>% rvest::html_text2()
 }
 
-.parse_series_result <- function(series_element) {
-  team_names <- .get_team_names(series_element)
-  
-  series_matches_won <- series_element %>% 
+.parse_bracket_series_result <- function(bracket_element) {
+  team_names <- .get_team_names(bracket_element)
+
+  series_matches_won <- bracket_element %>% 
     rvest::html_elements('.brkts-opponent-score-inner') %>% 
     rvest::html_text2()
   
@@ -23,13 +23,17 @@
       names_from = .data$side,
       values_from = c(.data$team, .data$w),
       names_glue = '{side}_{.value}'
-    )
+    ) %>% 
+    dplyr::mutate(
+      series_result = 'bracket'
+    ) %>% 
+    dplyr::relocate(series_result)
 }
 
-.parse_series_matches <- function(series_element) {
-  team_names <- .get_team_names(series_element)
+.parse_bracket_series_matches <- function(bracket_element) {
+  team_names <- .get_team_names(bracket_element)
   
-  popup <- series_element %>% rvest::html_elements('.brkts-popup.brkts-match-info-popup')
+  popup <- bracket_element %>% rvest::html_elements('.brkts-popup.brkts-match-info-popup')
   popup_matches <- popup %>% rvest::html_elements('.brkts-popup-body-element.brkts-popup-body-game')
   popup_divs <- popup_matches %>% rvest::html_elements('div > div')
   match_text <- popup_divs %>% 
@@ -102,6 +106,45 @@
     dplyr::filter(!(is.na(.data$winner) & !.data$missing_result))
 }
 
+
+.parse_pool_series_matches <- function(pool_elements) {
+  pool_elements %>% .parse_bracket_series_matches()
+  
+}
+
+.parse_pool_play_series_results <- function(pool_elements) {
+
+  teams <- pool_elements %>% 
+    rvest::html_elements(
+      '.brkts-matchlist-opponent'
+    ) %>% 
+    rvest::html_attr('aria-label')
+  
+  scores <- pool_elements %>% 
+    rvest::html_elements(
+      '.brkts-matchlist-score'
+    ) %>% 
+    rvest::html_text2()
+  
+  n_teams <- length(teams)
+  
+  if((n_teams %% 2) == 1) { 
+    n_teams <- n_teams - 1
+    teams <- teams[1:(length(n_teams) - 1)]
+    scores <- scores[1:(length(n_teams) - 1)]
+  }
+  
+  idx_winner <- seq(1, n_teams, by = 2)
+  idx_loser <- seq(2, n_teams, by = 2)
+  tibble::tibble(
+    series_type = 'pool',
+    home_team = teams[idx_winner],
+    away_team = teams[idx_loser],
+    home_w = scores[idx_winner],
+    away_w = scores[idx_loser]
+  )
+}
+
 .parse_infobox <- function(page) {
   infobox_element <- page %>% rvest::html_elements('.fo-nttax-infobox-wrapper.infobox-halo')
   title <- infobox_element %>% 
@@ -162,6 +205,16 @@
   )
 }
 
+
+.do_possibly_map_dfr_tourney_elements <- function(elements, f) {
+  possibly_f <- purrr::possibly(f, otherwise = tibble::tibble(), quiet = TRUE)
+  elements %>% 
+    purrr::map_dfr(possibly_f, .id = 'series_index') %>% 
+    dplyr::mutate(
+      dplyr::across(.data$series_index, as.integer)
+    )
+}
+
 scrape_bracket <- function(url) {
   
   cli::cli_alert_info(
@@ -171,12 +224,49 @@ scrape_bracket <- function(url) {
   page <- url %>% rvest::read_html()
   infobox <- .parse_infobox(page)
   teams <- .parse_teams(page)
+  
+  ## this is a special case (confirmed no past tournaments have this)
+  ## might need to use `url_exists` going forward.
+  if(url == 'https://liquipedia.net/halo/Halo_Championship_Series/2021/Kickoff_Major') {
+    pool_page <- sprintf('%s/Pool_Play', url) %>% rvest::read_html()
+  } else {
+    pool_page <- page
+  }
+  
+  pool_elements <- pool_page %>% 
+    rvest::html_elements(
+      '.brkts-matchlist-match.brkts-match-has-details.brkts-match-popup-wrapper'
+    )
+  
   bracket_elements <- page %>% rvest::html_elements('.brkts-match.brkts-match-popup-wrapper')
   
   tourney <- infobox %>% 
     dplyr::mutate(
       teams = list(teams)
     )
+
+  has_pool_play <- length(pool_elements) >= 0
+  if(!has_pool_play) {
+    
+    cli::cli_alert_info(
+      sprintf('No pool play matches to scrape at %s.', url)
+    )
+  } else {
+    # do_pool <- purrr::partial(
+    #   .do_possibly_map_dfr_tourney_elements,
+    #   pool_elements,
+    #   ... = 
+    # )
+    # pool_series_matches <- do_bracket(.parse_bracket_series_matches)
+    # pool_series_results <- do_bracket(.parse_bracket_series_result)
+    pool_series_matches <- .parse_pool_series_matches(
+      pool_elements
+    )
+    pool_series_results <- .parse_pool_play_series_results(
+      pool_elements
+    )
+  }
+  
   
   if(length(bracket_elements) == 0) {
     cli::cli_alert_warning(
@@ -187,17 +277,14 @@ scrape_bracket <- function(url) {
     )
   }
   
-  do_possibly_map_dfr <- function(f) {
-    possibly_f <- purrr::possibly(f, otherwise = tibble::tibble(), quiet = TRUE)
-    bracket_elements %>% 
-      purrr::map_dfr(possibly_f, .id = 'series_index') %>% 
-      dplyr::mutate(
-        dplyr::across(.data$series_index, as.integer)
-      )
-  }
+  do_bracket <- purrr::partial(
+    .do_possibly_map_dfr_tourney_elements,
+    bracket_elements,
+    ... = 
+  )
   
-  series_matches <- do_possibly_map_dfr(.parse_series_matches)
-  series_results <- do_possibly_map_dfr(.parse_series_result)
+  bracket_series_matches <- do_bracket(.parse_bracket_series_matches)
+  bracket_series_results <- do_bracket(.parse_bracket_series_result)
   tourney %>% 
     dplyr::mutate(
       series_results = list(series_results),
