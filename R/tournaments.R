@@ -292,7 +292,11 @@ do_scrape_tournaments <- function(scrape_time, overwrite = FALSE) {
       new_recent_tournaments$url,
       cli::cli_li
     )
-    distinct_tiers <- new_recent_tournaments %>% dplyr::distinct(.data$tier)
+
+    distinct_tiers <- new_recent_tournaments %>% 
+      dplyr::distinct(.data$tier) %>% 
+      dplyr::pull(.data$tier)
+
     new_tournaments <- distinct_tiers %>% 
       stats::setNames(., .) %>% 
       purrr::map_dfr(possibly_scrape_tournament, .id = 'tier') %>% 
