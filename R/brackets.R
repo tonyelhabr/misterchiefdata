@@ -9,7 +9,7 @@
 
 .parse_bracket_series_result <- function(bracket_element) {
   teams <- .get_teams_from_series_element(bracket_element)
-
+  
   scores <- bracket_element %>% 
     rvest::html_elements('.brkts-opponent-score-inner') %>% 
     rvest::html_text2()
@@ -118,14 +118,14 @@
 }
 
 .parse_pool_play_series_result <- function(pool_element) {
-
+  
   teams <- pool_element %>% 
     rvest::html_elements(
       '.brkts-matchlist-opponent'
     ) %>% 
     rvest::html_attr('aria-label')
   
-  scores <- pool_elements %>% 
+  scores <- pool_element %>% 
     rvest::html_elements(
       '.brkts-matchlist-score'
     ) %>% 
@@ -213,15 +213,11 @@
 
 .do_possibly_map_dfr_tourney_elements <- function(elements, f) {
   possibly_f <- purrr::possibly(f, otherwise = tibble::tibble(), quiet = TRUE)
-  tibble::tibble(
-    ser
-    elements, .id = 'series_index') %>% 
+  elements %>% 
+    purrr::map_dfr(possibly_f, .id = 'series_index') %>% 
     dplyr::mutate(
-      series_index = dplyr::row_number())
-    ) %>% 
-  dplyr::relocate(
-    series_index
-  )
+      dplyr::across(.data$series_index, as.integer)
+    )
 }
 
 scrape_bracket <- function(url) {
@@ -253,7 +249,7 @@ scrape_bracket <- function(url) {
     dplyr::mutate(
       teams = list(teams)
     )
-
+  
   has_pool_play <- length(pool_elements) >= 0
   if(!has_pool_play) {
     
@@ -263,19 +259,13 @@ scrape_bracket <- function(url) {
     pool_series_matches <- tibble::tibble()
     pool_series_results <- tibble::tibble()
   } else {
-    # do_pool <- purrr::partial(
-    #   .do_possibly_map_dfr_tourney_elements,
-    #   pool_elements,
-    #   ... = 
-    # )
-    # pool_series_matches <- do_bracket(.parse_bracket_series_matches)
-    # pool_series_results <- do_bracket(.parse_bracket_series_result)
-    pool_series_matches <- .parse_pool_series_matches(
-      pool_elements
+    do_pool <- purrr::partial(
+      .do_possibly_map_dfr_tourney_elements,
+      pool_elements,
+      ... =
     )
-    pool_series_results <- .parse_pool_play_series_results(
-      pool_elements
-    )
+    pool_series_matches <- do_bracket(.parse_bracket_series_matches)
+    pool_series_results <- do_bracket(.parse_bracket_series_result)
   }
   
   
@@ -312,6 +302,45 @@ possibly_scrape_bracket <- purrr::possibly(
   quiet = TRUE
 )
 
+
+## this is only necessary cuz infobox is inconsistent... i could hard code rules
+## to be implemented immediately
+.coalesce_brackets_date <- function(date1, date2) {
+  dplyr::coalesce(date1, date2) %>% lubridate::ymd()
+}
+
+clean_brackets <- function(x) {
+  brackets %>%
+    dplyr::mutate(
+      dplyr::across(.data$organizers, ~dplyr::coalesce(.x, .data$organizer)),
+      dplyr::across(.data$start_date, ~.coalesce_brackets_date(.x, .data$date)),
+      dplyr::across(.data$end_date, ~.coalesce_brackets_date(.x, .data$date)),
+      dplyr::across(.data$number_of_teams, as.integer)
+    ) %>% 
+    dplyr::select(
+      .data$url,
+      .data$event_name,
+      .data$series,
+      .data$organizers,
+      .data$game_version,
+      .data$type,
+      .data$location,
+      .data$venue,
+      .data$prize_pool,
+      .data$start_date,
+      .data$end_date,
+      .data$number_of_teams,
+      tier = .data$liquipedia_tier,
+      .data$teams,
+      .data$pool_series_results,
+      .data$pool_series_matches,
+      .data$bracket_series_results,
+      .data$bracket_match_results,
+      .data$scrape_time
+    )
+}
+
+
 do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
   
   cli::cli_alert_info('Scraping brackets.')
@@ -335,10 +364,10 @@ do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
       dplyr::filter(!(is.na(.data$first_place) & is.na(.data$second_place))) %>% 
       dplyr::arrange(dplyr::desc(.data$start_date))
     
-    brackets <- bracket_urls$url %>% 
+    raw_brackets <- bracket_urls$url %>% 
       stats::setNames(., .) %>% 
       purrr::map_dfr(possibly_scrape_bracket, .id = 'url')
-    brackets$scrape_time <- scrape_time
+    raw_brackets$scrape_time <- scrape_time
   } else {
     existing_brackets <- readr::read_rds(path_brackets)
     new_urls <- tournaments %>% dplyr::filter(.data$scrape_time == !!scrape_time)
@@ -355,15 +384,18 @@ do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
       purrr::map_dfr(possibly_scrape_bracket, .id = 'url')
     
     new_brackets$scrape_time <- scrape_time
-    brackets <- dplyr::bind_rows(
+    raw_brackets <- dplyr::bind_rows(
       new_brackets,
       existing_brackets %>% 
         dplyr::filter(!(.data$url %in% new_urls$url))
     )
   }
   
-  readr::write_rds(brackets, path_brackets)
+  readr::write_rds(raw_brackets, path_raw_brackets)
   cli::cli_alert_success('Done scraping brackets.')
+  clean_brackets <- brackets %>% clean_brackets()
+  readr::write_rds(brackets, path_brackets)
   brackets
   
 }
+
