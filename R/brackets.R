@@ -1,37 +1,41 @@
 
-.get_team_names <- function(series_element) {
+.get_teams_from_series_element <- function(series_element) {
   names <- series_element %>% rvest::html_elements('.name')
-  idx_team_names <- names %>% 
+  idx_teams <- names %>% 
     rvest::html_attr('style') %>% 
     stringr::str_which('overflow:hidden;text-overflow:ellipsis;white-space:pre')
-  names[idx_team_names] %>% rvest::html_text2()
+  names[idx_teams] %>% rvest::html_text2()
 }
 
 .parse_bracket_series_result <- function(bracket_element) {
-  team_names <- .get_team_names(bracket_element)
+  teams <- .get_teams_from_series_element(bracket_element)
 
-  series_matches_won <- bracket_element %>% 
+  scores <- bracket_element %>% 
     rvest::html_elements('.brkts-opponent-score-inner') %>% 
     rvest::html_text2()
   
+  
+  n_teams <- length(teams)
+  
+  if((n_teams %% 2) == 1) { 
+    n_teams <- n_teams - 1
+    teams <- teams[1:(length(n_teams) - 1)]
+    scores <- scores[1:(length(n_teams) - 1)]
+  }
+  
+  idx_home <- seq(1, n_teams, by = 2)
+  idx_away <- seq(2, n_teams, by = 2)
   tibble::tibble(
-    side = c('home', 'away'),
-    team = team_names,
-    w = series_matches_won
-  ) %>% 
-    tidyr::pivot_wider(
-      names_from = .data$side,
-      values_from = c(.data$team, .data$w),
-      names_glue = '{side}_{.value}'
-    ) %>% 
-    dplyr::mutate(
-      series_result = 'bracket'
-    ) %>% 
-    dplyr::relocate(series_result)
+    series_type = 'bracket',
+    home_team = teams[idx_home],
+    away_team = teams[idx_away],
+    home_w = scores[idx_home],
+    away_w = scores[idx_away]
+  )
 }
 
 .parse_bracket_series_matches <- function(bracket_element) {
-  team_names <- .get_team_names(bracket_element)
+  teams <- .get_teams_from_series_element(bracket_element)
   
   popup <- bracket_element %>% rvest::html_elements('.brkts-popup.brkts-match-info-popup')
   popup_matches <- popup %>% rvest::html_elements('.brkts-popup-body-element.brkts-popup-body-game')
@@ -47,8 +51,8 @@
   n_matches <- length(match_text) / 3
   matches_wide <- tibble::tibble(
     match = rep(1:n_matches, each = 3),
-    home_team = team_names[1],
-    away_team = team_names[2],
+    home_team = teams[1],
+    away_team = teams[2],
     text = match_text,
     name = rep(c('home_score', 'map', 'away_score'), n_matches)
   ) %>% 
@@ -73,6 +77,7 @@
         dplyr::across(c(.data$home_score, .data$away_score), as.integer)
       )
   )
+  
   matches_wide <- matches_wide %>%
     dplyr::select(
       .data$match,
@@ -107,14 +112,14 @@
 }
 
 
-.parse_pool_series_matches <- function(pool_elements) {
-  pool_elements %>% .parse_bracket_series_matches()
+.parse_pool_series_matches <- function(pool_element) {
+  pool_element %>% .parse_bracket_series_matches()
   
 }
 
-.parse_pool_play_series_results <- function(pool_elements) {
+.parse_pool_play_series_result <- function(pool_element) {
 
-  teams <- pool_elements %>% 
+  teams <- pool_element %>% 
     rvest::html_elements(
       '.brkts-matchlist-opponent'
     ) %>% 
@@ -208,11 +213,15 @@
 
 .do_possibly_map_dfr_tourney_elements <- function(elements, f) {
   possibly_f <- purrr::possibly(f, otherwise = tibble::tibble(), quiet = TRUE)
-  elements %>% 
-    purrr::map_dfr(possibly_f, .id = 'series_index') %>% 
+  tibble::tibble(
+    ser
+    elements, .id = 'series_index') %>% 
     dplyr::mutate(
-      dplyr::across(.data$series_index, as.integer)
-    )
+      series_index = dplyr::row_number())
+    ) %>% 
+  dplyr::relocate(
+    series_index
+  )
 }
 
 scrape_bracket <- function(url) {
@@ -251,6 +260,8 @@ scrape_bracket <- function(url) {
     cli::cli_alert_info(
       sprintf('No pool play matches to scrape at %s.', url)
     )
+    pool_series_matches <- tibble::tibble()
+    pool_series_results <- tibble::tibble()
   } else {
     # do_pool <- purrr::partial(
     #   .do_possibly_map_dfr_tourney_elements,
@@ -285,11 +296,14 @@ scrape_bracket <- function(url) {
   
   bracket_series_matches <- do_bracket(.parse_bracket_series_matches)
   bracket_series_results <- do_bracket(.parse_bracket_series_result)
-  tourney %>% 
+  bracket <- tourney %>% 
     dplyr::mutate(
-      series_results = list(series_results),
-      match_results = list(series_matches)
+      pool_series_results = list(pool_series_results),
+      pool_series_matches = list(pool_series_matches),
+      bracket_series_results = list(bracket_series_results),
+      bracket_match_results = list(bracket_series_matches)
     )
+  bracket
 }
 
 possibly_scrape_bracket <- purrr::possibly(
