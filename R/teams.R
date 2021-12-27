@@ -47,8 +47,15 @@ do_update_teams <- function(brackets, update_time) {
       tidyr::unnest(!!col)
   }
   
-  series_results <- .select_unnest('series_results')
-  match_results <- .select_unnest('match_results')
+  series_results <- dplyr::bind_rows(
+    .select_unnest('bracket_series_results'),
+    .select_unnest('pool_series_results')
+  )
+  match_results <- dplyr::bind_rows(
+    .select_unnest('bracket_match_results'),
+    .select_unnest('pool_match_results')
+  )
+  
   teams_init <- brackets %>% 
     dplyr::select(tourney_url = .data$url, .data$teams) %>% 
     tidyr::unnest(.data$teams) %>% 
