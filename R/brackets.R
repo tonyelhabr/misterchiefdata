@@ -289,7 +289,7 @@ scrape_bracket <- function(url) {
   bracket <- tourney %>% 
     dplyr::mutate(
       pool_series_results = list(pool_series_results),
-      pool_series_matches = list(pool_series_matches),
+      pool_match_results = list(pool_series_matches),
       bracket_series_results = list(bracket_series_results),
       bracket_match_results = list(bracket_series_matches)
     )
@@ -392,9 +392,9 @@ do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
   }
   
   readr::write_rds(raw_brackets, path_raw_brackets)
-  cli::cli_alert_success('Done scraping brackets.')
-  clean_brackets <- brackets %>% clean_brackets()
+  brackets <- raw_brackets %>% clean_brackets()
   readr::write_rds(brackets, path_brackets)
+  cli::cli_alert_success('Done scraping brackets.')
   brackets
   
 }
