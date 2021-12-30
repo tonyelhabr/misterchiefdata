@@ -11,14 +11,14 @@ License: MIT + file LICENSE
 Depends: 
     R (>= 4.0)
 Imports: 
-    arrow,
     cli,
     dplyr,
     httr,
+    httr2,
     janitor,
+    jsonlite,
     lubridate,
     magrittr,
-    memoise,
     purrr,
     readr,
     rlang (>= 0.1.2),

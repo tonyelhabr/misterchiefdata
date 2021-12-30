@@ -58,7 +58,7 @@ do_scrape_gamertags <- function(pages = 0:(ceiling(482/15)), update_time = Sys.t
   }
   
   gamertags <- pages %>% 
-    setNames(., .) %>% 
+    stats::setNames(., .) %>% 
     purrr::map_dfr(possibly_scrape_gamertags, .id = 'page')
   
   gamertags <- gamertags %>% 

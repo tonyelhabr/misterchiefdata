@@ -1,7 +1,6 @@
 
 #' Update all data
 #' 
-#' @param scrape_time Time that data was last scraped
 #' @param overwrite Whether to overwrite all existing data
 #' @export
 update_data <- function(

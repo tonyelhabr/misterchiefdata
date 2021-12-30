@@ -8,8 +8,6 @@ update_data(overwrite = FALSE)
 }
 \arguments{
 \item{overwrite}{Whether to overwrite all existing data}
-
-\item{scrape_time}{Time that data was last scraped}
 }
 \description{
 Update all data

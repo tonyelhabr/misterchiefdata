@@ -1,7 +1,7 @@
 
-.import_bad_urls <- memoise::memoise({function() {
+.import_bad_urls <- function() {
   import_csv('data-raw/bad_urls.csv')
-}})
+}
 
 import_bad_urls <- function(entity) {
   bad_urls <- .import_bad_urls()

@@ -106,8 +106,8 @@ scrape_roster <- function(url) {
     roster <- roster %>% 
       dplyr::mutate(
         leave_date2 = paste0('2', .data$leave_date) %>% .clean_roster_date('leave'),
-        dplyr::across(leave_date, ~.clean_roster_date(.x, 'leave')),
-        dplyr::across(leave_date, ~dplyr::coalesce(.x, leave_date))
+        dplyr::across(.data$leave_date, ~.clean_roster_date(.x, 'leave')),
+        dplyr::across(.data$leave_date, ~dplyr::coalesce(.x, .data$leave_date))
       )
   )
   
