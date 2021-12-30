@@ -4,6 +4,7 @@
 ^dev$
 ^queries$
 ^LICENSE\.md$
+data/raw_brackets.rds
 data/brackets.rds
 data/players.csv
 data/rosters.csv
