@@ -4,12 +4,12 @@
 \alias{update_data}
 \title{Update all data}
 \usage{
-update_data(scrape_time = lubridate::now(), overwrite = FALSE)
+update_data(overwrite = FALSE)
 }
 \arguments{
-\item{scrape_time}{Time that data was last scraped}
-
 \item{overwrite}{Whether to overwrite all existing data}
+
+\item{scrape_time}{Time that data was last scraped}
 }
 \description{
 Update all data

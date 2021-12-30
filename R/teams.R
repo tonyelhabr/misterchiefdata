@@ -37,7 +37,7 @@ do_update_teams <- function(brackets, update_time) {
   teams_exist <- file.exists(path_teams)
   
   if(teams_exist) {
-    old_teams <- arrow::read_parquet(path_teams)
+    existing_teams <- import_csv(path_teams)
   }
 
   .select_unnest <- function(col) {
@@ -58,7 +58,10 @@ do_update_teams <- function(brackets, update_time) {
   
   teams_init <- brackets %>% 
     dplyr::select(tourney_url = .data$url, .data$teams) %>% 
-    tidyr::unnest(.data$teams) %>% 
+    dplyr::mutate(
+      teams = purrr::map(.data$teams, ~dplyr::mutate(.x, dplyr::across(dplyr::everything(), as.character)))
+    ) %>% 
+    tidyr::unnest(cols = .data$teams) %>% 
     dplyr::rename(team_url = .data$url, url = .data$tourney_url) %>% 
     dplyr::count(.data$team, .data$team_url, name = 'n_tournaments', sort = TRUE)
   
@@ -96,13 +99,13 @@ do_update_teams <- function(brackets, update_time) {
     )
   
   teams$update_time <- update_time
-  arrow::write_parquet(teams, path_teams)
+  readr::write_csv(teams, path_teams, na = '')
   
   if(teams_exist) {
     teams_join <- teams %>% 
       dplyr::anti_join(
         teams %>% dplyr::select(-.data$update_time),
-        old_teams %>% dplyr::select(-.data$update_time), 
+        existing_teams %>% dplyr::select(-.data$update_time), 
         by = c('team', 'team_url', 'n_series', 'n_matches', 'n_tournaments', 'n_tournaments_w_series')
       )
     

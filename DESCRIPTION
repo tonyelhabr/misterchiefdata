@@ -18,6 +18,7 @@ Imports:
     janitor,
     lubridate,
     magrittr,
+    memoise,
     purrr,
     readr,
     rlang (>= 0.1.2),

@@ -44,7 +44,7 @@ possibly_scrape_gamertags <- purrr::possibly(
 )
 
 ## upon last checking, there are 482 players
-do_scrape_gamertags <- function(pages = 0:(ceiling(482/15)), update_time = lubridate::now(), overwrite = TRUE) {
+do_scrape_gamertags <- function(pages = 0:(ceiling(482/15)), update_time = Sys.time(), overwrite = TRUE) {
   
   cli::cli_alert_info(
     'Scraping gamertags.'
@@ -54,7 +54,7 @@ do_scrape_gamertags <- function(pages = 0:(ceiling(482/15)), update_time = lubri
     cli::cli_alert_info(
       'Returning gamertags without updating.'
     )
-    return(arrow::read_parquet(path_gamertags))
+    return(import_csv(path_gamertags))
   }
   
   gamertags <- pages %>% 
@@ -73,7 +73,7 @@ do_scrape_gamertags <- function(pages = 0:(ceiling(482/15)), update_time = lubri
     'Done scraping gamertags.'
   )
   
-  arrow::write_parquet(gamertags, path_gamertags)
+  export_csv(gamertags, path_gamertags)
   gamertags
 }
 

@@ -5,7 +5,8 @@
 ^queries$
 ^LICENSE\.md$
 data/brackets.rds
-data/players.parquet
-data/rosters.parquet
-data/teams.parquet
-data/tournaments.parquet
+data/players.csv
+data/rosters.csv
+data/teams.csv
+data/tournaments.csv
+data/gamertags.csv

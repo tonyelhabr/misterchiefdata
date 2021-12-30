@@ -68,6 +68,13 @@
   match.arg(x, ...)
 }
 
+.strip_tier <- function(x) {
+  ## make it just S instead of S-Tier or S-Tier Tournaments
+  x %>%
+    stringr::str_remove('[-]Tier') %>% 
+    stringr::str_remove(' Tournaments')
+}
+
 scrape_tournament <- function(tier = .get_valid_tournament_tiers()) {
   
   .validate_tournament_tier(tier)
@@ -86,10 +93,7 @@ scrape_tournament <- function(tier = .get_valid_tournament_tiers()) {
   hn <- ifelse(tier == 'Recent', '2', '3')
   titles_init <- page %>% rvest::html_elements(sprintf('h%s .mw-headline', hn)) %>% rvest::html_text2()
   if(tier == 'Recent') {
-    titles_init <- titles_init %>% 
-      ## make it just S instead of S-Tier or S-Tier Tournaments
-      stringr::str_remove('[-]Tier') %>% 
-      stringr::str_remove(' Tournaments')
+    titles_init <- titles_init %>% .strip_tier()
   }
   tourney_elements <- page %>% rvest::html_elements('.divTable.table-full-width.tournament-card')
   
@@ -207,13 +211,15 @@ possibly_scrape_tournament <- purrr::possibly(
   quiet = FALSE
 )
 
-.recent_tourney_ffa_urls <- tibble::tibble(
-  url = c(
-    'https://liquipedia.net/halo/Halo_World_Championship/2018/FFA',
-    'https://liquipedia.net/halo/Twitch_Rivals/Halo_3_Throwback_with_Ninja/FFA',
-    'https://liquipedia.net/halo/Chipotle_Challenger_Series/Winter_Season'
-  )
-)
+scrape_new_tournaments <- function(tournament_urls, scrape_time) {
+  res <- tournament_urls %>% 
+    dplyr::distinct(.data$tier) %>% 
+    dplyr::pull(.data$tier) %>% 
+    stats::setNames(., .) %>% 
+    purrr::map_dfr(possibly_scrape_tournament, .id = 'tier')
+  res$scrape_time <- scrape_time
+  res
+}
 
 do_scrape_tournaments <- function(scrape_time, overwrite = FALSE) {
   
@@ -234,26 +240,34 @@ do_scrape_tournaments <- function(scrape_time, overwrite = FALSE) {
       'Scraping all tournament urls.'
     )
     
-    tournaments <- letter_tiers %>% 
-      stats::setNames(., .) %>% 
-      purrr::map_dfr(possibly_scrape_tournament, .id = 'tier')
-    
-    tournaments$scrape_time <- scrape_time
+    tournaments <- tibble::tibble(tier = !!letter_tiers) %>%
+      scrape_new_tournaments(scrape_time)
+
     
   } else {
-    existing_tournaments <- arrow::read_parquet(path_tournaments)
+    existing_tournaments <- import_csv(path_tournaments)
+    
     finished_tournaments <- existing_tournaments %>% 
       dplyr::filter(!(is.na(.data$first_place) | is.na(.data$second_place)))
+    
     future_tournaments <- existing_tournaments %>% 
       dplyr::filter(.data$end_date > !!scrape_time)
+    
+    open_brackets <- existing_tournaments %>% 
+      dplyr::filter(
+        basename(.data$url) == 'Open_Bracket'
+      )
+    
     other_tournaments <- existing_tournaments %>% 
       dplyr::anti_join(
         dplyr::bind_rows(
           finished_tournaments %>% dplyr::distinct(.data$url),
-          future_tournaments %>% dplyr::distinct(.data$url)
+          future_tournaments %>% dplyr::distinct(.data$url),
+          open_brackets %>% dplyr::distinct(.data$url)
         ),
         by = 'url'
       )
+    
     if(nrow(other_tournaments) > 0) {
       cli::cli_alert_warning(
         'At least one tournament cannot be classified as finished or in the future:'
@@ -269,7 +283,7 @@ do_scrape_tournaments <- function(scrape_time, overwrite = FALSE) {
       dplyr::filter(.data$title %in% !!letter_tiers) %>% 
       dplyr::distinct(tier = .data$title, .data$url) %>% 
       dplyr::anti_join(
-        .recent_tourney_ffa_urls,
+        import_bad_urls('tournament'),
         by = 'url'
       ) %>%
       dplyr::anti_join(
@@ -293,16 +307,10 @@ do_scrape_tournaments <- function(scrape_time, overwrite = FALSE) {
       cli::cli_li
     )
 
-    distinct_tiers <- new_recent_tournaments %>% 
-      dplyr::distinct(.data$tier) %>% 
-      dplyr::pull(.data$tier)
-
-    new_tournaments <- distinct_tiers %>% 
-      stats::setNames(., .) %>% 
-      purrr::map_dfr(possibly_scrape_tournament, .id = 'tier') %>% 
+    new_tournaments <- new_recent_tournaments %>% 
+      scrape_new_tournaments(scrape_time) %>% 
       dplyr::filter(.data$url %in% new_recent_tournaments$url)
-    
-    new_tournaments$scrape_time <- scrape_time
+
     tournaments <- dplyr::bind_rows(
       new_tournaments,
       existing_tournaments %>% 
@@ -311,7 +319,7 @@ do_scrape_tournaments <- function(scrape_time, overwrite = FALSE) {
 
   }
   
-  arrow::write_parquet(tournaments, path_tournaments)
+  export_csv(tournaments, path_tournaments)
   cli::cli_alert_success('Done scraping tournaments.')
   tournaments
 }

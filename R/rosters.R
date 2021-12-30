@@ -5,6 +5,8 @@
     lubridate::ymd()
 }
 
+
+
 scrape_roster <- function(url) {
   team <- url %>% 
     stringr::str_remove_all('^.*\\/') %>% 
@@ -78,18 +80,46 @@ scrape_roster <- function(url) {
     return(tibble::tibble())
   }
   
-  roster <- 1:n_tables %>% 
-    purrr::map_dfr(pluck_table) %>% 
-    dplyr::mutate(scrape_method = !!scrape_method) %>%  
-    dplyr::transmute(
-      dplyr::across(.data$id, ~tolower(.x) %>% stringr::str_replace_all(' ', '_')),
-      status = .data$table_name %>% stringr::str_replace_all('(^.*)(\\s.*$)', '\\1') %>% tolower(),
-      dplyr::across(.data$name, ~stringr::str_remove_all(.x, '^\\(|\\)')),
-      dplyr::across(.data$join_date, ~.clean_roster_date(.x, 'join')), # warnings with g2 are fine
-      dplyr::across(.data$leave_date, ~.clean_roster_date(.x, 'leave')), # seen an issue with the site where a date is missing the leading "2" for "20[12]x"
+  suppressWarnings(
+    roster <- 1:n_tables %>% 
+      purrr::map_dfr(pluck_table) %>% 
+      dplyr::mutate(scrape_method = !!scrape_method) %>%  
+      dplyr::mutate(
+        dplyr::across(.data$id, ~tolower(.x) %>% stringr::str_replace_all(' ', '_')),
+        status = .data$table_name %>% stringr::str_replace_all('(^.*)(\\s.*$)', '\\1') %>% tolower(),
+        dplyr::across(.data$name, ~stringr::str_remove_all(.x, '^\\(|\\)')),
+        # seen an issue with the site where a date is missing the leading "2" for "20[12]x"
+        join_date2 = .data$join_date %>% paste0('2', .) %>% .clean_roster_date('join'),
+        dplyr::across(.data$join_date, ~.clean_roster_date(.x, 'join')),
+        dplyr::across(.data$join_date, ~dplyr::coalesce(.x, .data$join_date2))
+      )
+  )
+  
+  if(!any(names(roster) == 'leave_date')) {
+    roster <- roster %>%
+      dplyr::mutate(
+        leave_date = lubridate::NA_Date_
+      )
+  }
+  
+  suppressWarnings(
+    roster <- roster %>% 
+      dplyr::mutate(
+        leave_date2 = paste0('2', .data$leave_date) %>% .clean_roster_date('leave'),
+        dplyr::across(leave_date, ~.clean_roster_date(.x, 'leave')),
+        dplyr::across(leave_date, ~dplyr::coalesce(.x, leave_date))
+      )
+  )
+  
+  roster %>% 
+    dplyr::select(
+      .data$id,
+      .data$status,
+      .data$name,
+      .data$join_date,
+      .data$leave_date,
       .data$scrape_method
     )
-  roster
 }
 
 possibly_scrape_roster <- purrr::possibly(
@@ -164,14 +194,23 @@ scrape_latest_transfers <- function() {
       new_teams %>% dplyr::rename(new_team = .data$team, new_team_url = .data$url)
     )
   }
-
+  
   transfers <- c(
     'neutral',
     'to-team',
     'from-team'
   ) %>% 
     purrr::map_dfr(.extract_row_elements)
-  
+  transfers
+}
+
+scrape_new_rosters <- function(teams, scrape_time) {
+  res <- teams %>% 
+    dplyr::pull(.data$team_url) %>% 
+    stats::setNames(., .) %>% 
+    purrr::map_dfr(possibly_scrape_roster, .id = 'team_url')
+  res$scrape_time <- scrape_time
+  res
 }
 
 do_scrape_rosters <- function(teams, scrape_time, overwrite = TRUE) {
@@ -186,70 +225,112 @@ do_scrape_rosters <- function(teams, scrape_time, overwrite = TRUE) {
     )
   }
   
+  existing_teams <- teams %>% 
+    dplyr::filter(!is.na(.data$team_url))
+  
   if(!rosters_exist | overwrite) {
     
-    rosters <- teams %>% 
-      dplyr::filter(!is.na(.data$team_url)) %>% 
-      dplyr::pull(.data$team_url) %>% 
-      stats::setNames(., .) %>% 
-      purrr::map_dfr(possibly_scrape_roster, .id = 'team_url')
-    rosters$scrape_time <- scrape_time
+    rosters <- existing_teams %>% scrape_new_rosters(scrape_time)
+
   } else {
-    existing_rosters <- arrow::read_parquet(path_rosters)
+    existing_rosters <- import_csv(path_rosters)
+    existing_roster_urls <- existing_rosters %>% 
+      dplyr::distinct(.data$team_url)
+    
+    new_teams <- existing_teams %>% 
+      dplyr::anti_join(
+        existing_roster_urls,
+        by = 'team_url'
+      ) %>% 
+      dplyr::anti_join(
+        import_bad_urls('roster') %>% dplyr::rename(team_url = .data$url),
+        by = 'team_url'
+      )
+    
+    has_new_teams <- nrow(new_teams) > 0
+    if(!has_new_teams) {
+      cli::cli_alert_info(
+        'No rosters to update based on teams provided.'
+      )
+    } else {
+      cli::cli_alert_info(
+        'At least one roster to update.'
+      )
+      purrr::walk(
+        new_teams$team_url,
+        cli::cli_li
+      )
+    }
+    
     last_scrape_time <- existing_rosters %>% 
       dplyr::slice_max(.data$scrape_time, n = 1, with_ties = FALSE) %>% 
       dplyr::ungroup()
     transfers <- scrape_latest_transfers()
-
+    
     new_transfers <- transfers %>% 
       dplyr::filter(.data$date > scrape_time)
     
-    if(nrow(new_transfers) == 0) {
+    has_new_transfers <- nrow(new_transfers) > 0
+    if(!has_new_teams) {
       cli::cli_alert_info(
-        'No rosters to update since no transfers.'
+        'No rosters to update based on transfers.'
+      ) 
+    } else {
+      cli::cli_alert_info(
+        'At least one roster based on transfers:'
       )
+      purrr::walk(
+        new_transfers$team_url,
+        cli::cli_li
+      )
+    }
+    
+    if(!has_new_teams & !has_new_transfers) {
       return(existing_rosters) 
     }
     
     teams_to_update <- dplyr::bind_rows(
       new_transfers %>%
-        dplyr::distinct(team = .data$old_team),
+        dplyr::distinct(team_url = .data$old_team_url),
       new_transfers %>%
-        dplyr::distinct(team = .data$new_team)
+        dplyr::distinct(team_url = .data$new_team_url)
     ) %>%
-      dplyr::distinct(.data$team) %>% 
-      dplyr::arrange(.data$team) %>% 
+      dplyr::distinct(.data$team_url) %>% 
+      dplyr::arrange(.data$team_url) %>% 
       dplyr::left_join(
-        teams %>% dplyr::select(.data$team, .data$team_url),
-        by = 'team'
+        teams %>% 
+          dplyr::select(.data$team_url),
+        by = 'team_url'
       )
     
     teams_to_update_w_urls <- teams_to_update %>% 
       dplyr::filter(!is.na(.data$team_url))
     
-    if(nrow(teams_to_update_w_urls) == 0) {
+    has_teams_to_update <- nrow(teams_to_update_w_urls) > 0
+    if(!has_teams_to_update & has_new_transfers) {
       cli::cli_alert_success(
-        'No to update since there are no new transfers.'
-      )
-      return(existing_rosters) 
-    } else {
-      
-      new_rosters <- teams_to_update_w_urls %>% 
-        dplyr::pull(.data$team_url) %>% 
-        stats::setNames(., .) %>% 
-        purrr::map_dfr(possibly_scrape_roster, .id = 'team_url')
-      
-      new_rosters$scrape_time <- scrape_time
-      
-      rosters <- dplyr::bind_rows(
-        new_rosters,
-        existing_rosters %>% dplyr::filter(!(.data$team_url %in% teams_to_update_w_urls$team_url))
-      )
+        'There are new transfers, but they do not correspond to teams with known urls.'
+      ) 
     }
+    
+    if(!has_new_teams & !has_teams_to_update) {
+      return(existing_rosters) 
+    }
+    
+    new_rosters <- dplyr::bind_rows(
+      teams_to_update_w_urls %>% dplyr::select(.data$team_url), ## does matter if this has rows (so we stop early if it doesn't)
+      new_teams %>% dplyr::select(.data$team_url) ## doesn't matter if this has 0 rows
+    ) %>% 
+      scrape_new_rosters(scrape_time)
+
+    rosters <- dplyr::bind_rows(
+      new_rosters,
+      existing_rosters %>% dplyr::filter(!(.data$team_url %in% teams_to_update_w_urls$team_url))
+    )
     
   }
   
-  arrow::write_parquet(rosters, path_rosters)
+  export_csv(rosters, path_rosters)
   cli::cli_alert_success('Done scraping rosters.')
   rosters
 }

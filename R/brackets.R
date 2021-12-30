@@ -187,6 +187,16 @@
     ) %>% 
     janitor::clean_names()
   
+  nms <- names(info)
+  if(any(nms == 'date') & !all(c('start_date', 'end_date') %in% nms)) {
+    info <- info %>% 
+      dplyr::mutate(
+        start_date = .data$date,
+        end_date = .data$date
+      ) %>% 
+      dplyr::select(-.data$date)
+  }
+  
   dplyr::bind_cols(
     tibble::tibble(event_name = title),
     info = info
@@ -250,7 +260,7 @@ scrape_bracket <- function(url) {
       teams = list(teams)
     )
   
-  has_pool_play <- length(pool_elements) >= 0
+  has_pool_play <- length(pool_elements) > 0
   if(!has_pool_play) {
     
     cli::cli_alert_info(
@@ -264,8 +274,8 @@ scrape_bracket <- function(url) {
       pool_elements,
       ... =
     )
-    pool_series_matches <- do_bracket(.parse_bracket_series_matches)
-    pool_series_results <- do_bracket(.parse_bracket_series_result)
+    pool_series_matches <- do_pool(.parse_bracket_series_matches)
+    pool_series_results <- do_pool(.parse_bracket_series_result)
   }
   
   
@@ -302,22 +312,9 @@ possibly_scrape_bracket <- purrr::possibly(
   quiet = TRUE
 )
 
-
-## this is only necessary cuz infobox is inconsistent... i could hard code rules
-## to be implemented immediately
-.coalesce_brackets_date <- function(date1, date2) {
-  dplyr::coalesce(date1, date2) %>% lubridate::ymd()
-}
-
-clean_brackets <- function(x) {
-  brackets %>%
-    dplyr::mutate(
-      dplyr::across(.data$organizers, ~dplyr::coalesce(.x, .data$organizer)),
-      dplyr::across(.data$start_date, ~.coalesce_brackets_date(.x, .data$date)),
-      dplyr::across(.data$end_date, ~.coalesce_brackets_date(.x, .data$date)),
-      dplyr::across(.data$number_of_teams, as.integer)
-    ) %>% 
-    dplyr::select(
+clean_brackets <- function(raw_brackets) {
+  raw_brackets %>%
+    dplyr::transmute(
       .data$url,
       .data$event_name,
       .data$series,
@@ -327,63 +324,90 @@ clean_brackets <- function(x) {
       .data$location,
       .data$venue,
       .data$prize_pool,
-      .data$start_date,
-      .data$end_date,
-      .data$number_of_teams,
-      tier = .data$liquipedia_tier,
+      dplyr::across(.data$start_date, lubridate::ymd),
+      dplyr::across(.data$end_date, lubridate::ymd),
+      dplyr::across(.data$number_of_teams, as.integer),
+      tier = .data$liquipedia_tier %>% .strip_tier(),
       .data$teams,
       .data$pool_series_results,
-      .data$pool_series_matches,
+      .data$pool_match_results,
       .data$bracket_series_results,
       .data$bracket_match_results,
       .data$scrape_time
     )
 }
 
+scrape_new_brackets <- function(bracket_urls, scrape_time) {
+  res <- bracket_urls %>% 
+    dplyr::pull(.data$url) %>% 
+    stats::setNames(., .) %>% 
+    purrr::map_dfr(possibly_scrape_bracket, .id = 'url')
+  res$scrape_time <- scrape_time
+  res
+}
+
+## general flow for tournaments, brackets, rosters, and players:
+## 1. start message
+## 2. check if file exists.
+## 3a. if not (2), scrape everything
+## 3b. use `scrape_new_*()` function that takes a df with urls and scrape time
+## 4a. if (2), importing existing
+## 4b. check if there are no urls in passed in df vs. loaded df
+## 4c. check if there is a difference in scrape time in `scrape_time` vs. loaded df
+## 4d. scrape anything new
+## 5. write results
+## 6. final message
 
 do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
   
   cli::cli_alert_info('Scraping brackets.')
   
-  brackets_exist <- file.exists(path_brackets)
+  brackets_exist <- file.exists(path_raw_brackets) & file.exists(path_brackets)
   
   if(!brackets_exist) {
     cli::cli_alert_info(
-      sprintf('%s does not exist! Must scrape all brackets.', path_brackets)
+      sprintf('%s or %s does not exist! Must scrape all brackets.', path_raw_brackets, path_brackets)
     )
   }
+  
+  bracket_urls <- tournaments %>%
+    # dplyr::filter(.data$region == 'United States' | .data$region == 'North America') %>%
+    dplyr::filter(!(is.na(.data$first_place) & is.na(.data$second_place))) %>% 
+    dplyr::arrange(dplyr::desc(.data$start_date))
+  
   
   if(!brackets_exist | overwrite) {
     
     cli::cli_alert_info(
       'Scraping all brackets.'
     )
-    
-    bracket_urls <- tournaments %>%
-      dplyr::filter(.data$region == 'United States' | .data$region == 'North America') %>%
-      dplyr::filter(!(is.na(.data$first_place) & is.na(.data$second_place))) %>% 
-      dplyr::arrange(dplyr::desc(.data$start_date))
-    
-    raw_brackets <- bracket_urls$url %>% 
-      stats::setNames(., .) %>% 
-      purrr::map_dfr(possibly_scrape_bracket, .id = 'url')
-    raw_brackets$scrape_time <- scrape_time
+
+    raw_brackets <- bracket_urls %>% scrape_new_brackets(scrape_time)
+
   } else {
-    existing_brackets <- readr::read_rds(path_brackets)
+    existing_brackets <- readr::read_rds(path_raw_brackets)
+    
+    ## todo: use bracket_urls here?!?
+    
     new_urls <- tournaments %>% dplyr::filter(.data$scrape_time == !!scrape_time)
     
     if(nrow(new_urls) == 0) {
       cli::cli_alert_success(
-        'No new brackets to scrape.'
+        'No new brackets to scrape based on scrape time.'
       )
       return(existing_brackets)
     }
     
-    new_brackets <- new_urls$url %>% 
-      stats::setNames(., .) %>% 
-      purrr::map_dfr(possibly_scrape_bracket, .id = 'url')
+    cli::cli_alert_info(
+      'At least one new bracket to scrape:\n',
+    )
+    purrr::walk(
+      new_urls$url,
+      cli::cli_li
+    )
     
-    new_brackets$scrape_time <- scrape_time
+    new_brackets <- new_urls %>% scrape_new_brackets(scrape_time)
+
     raw_brackets <- dplyr::bind_rows(
       new_brackets,
       existing_brackets %>% 
@@ -398,4 +422,3 @@ do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
   brackets
   
 }
-

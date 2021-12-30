@@ -1,4 +1,23 @@
 
+.import_bad_urls <- memoise::memoise({function() {
+  import_csv('data-raw/bad_urls.csv')
+}})
+
+import_bad_urls <- function(entity) {
+  bad_urls <- .import_bad_urls()
+  bad_urls %>% 
+    dplyr::filter(.data$entity == !!entity) %>% 
+    dplyr::select(-.data$entity)
+}
+
+import_csv <- function(..., .show_col_types = FALSE) {
+  readr::read_csv(show_col_types = .show_col_types, ...)
+}
+
+export_csv <- function(..., .na = '') {
+  readr::write_csv(na = .na, ...)
+}
+
 # Reference: https://github.com/nflverse/nflreadr/blob/main/R/from_url.R
 rds_from_url <- function(url) {
   con <- base::url(url)
@@ -10,27 +29,6 @@ rds_from_url <- function(url) {
     return(tibble::tibble())
   }
   tibble::as_tibble(load)
-}
-
-
-parquet_from_url <- function(url){
-  load <- try(curl::curl_fetch_memory(url), silent = TRUE)
-  
-  if (load$status_code != 200) {
-    warning(
-      paste0(
-        'HTTP error',
-        load$status_code,
-        ' while retrieving data from <',
-        url,
-        '> \n Returning request payload.'
-      ),
-      call. = FALSE
-    )
-    return(tibble::tibble())
-  }
-  
-  arrow::read_parquet(load$content)
 }
 
 base_gh_path <- 'https://github.com/tonyelhabr/halo-data/raw/master/data'
@@ -47,9 +45,9 @@ read_halo_brackets <- function() {
   res
 }
 
-read_parquet <- function(x) {
-  url <- sprintf('%s/%s.parquet', base_gh_path, x)
-  res <- url %>% parquet_from_url()
+read_gh_csv <- function(x) {
+  url <- sprintf('%s/%s.csv', base_gh_path, x)
+  res <- url %>% import_csv()
   cli::cli_alert_success(
     sprintf('Imported data from %s.', url)
   )
@@ -61,7 +59,7 @@ read_parquet <- function(x) {
 #' @export
 #' @source <https://liquipedia.net>
 read_halo_players <- function() {
-  read_parquet('players')
+  read_gh_csv('players')
 }
 
 #' Read in professional Halo roster data
@@ -69,7 +67,7 @@ read_halo_players <- function() {
 #' @export
 #' @source <https://liquipedia.net>
 read_halo_rosters <- function() {
-  read_parquet('rosters')
+  read_gh_csv('rosters')
 }
 
 #' Read in professional Halo team data
@@ -77,7 +75,7 @@ read_halo_rosters <- function() {
 #' @export
 #' @source <https://liquipedia.net>
 read_halo_teams <- function() {
-  read_parquet('teams')
+  read_gh_csv('teams')
 }
 
 #' Read in professional Halo team data
@@ -85,5 +83,5 @@ read_halo_teams <- function() {
 #' @export
 #' @source <https://halodatahive.com>
 read_halo_gamertags <- function() {
-  read_parquet('gamertags')
+  read_gh_csv('gamertags')
 }
