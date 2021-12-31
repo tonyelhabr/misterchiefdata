@@ -34,7 +34,7 @@ rds_from_url <- function(url) {
 
 base_gh_path <- 'https://github.com/tonyelhabr/halo-data/raw/master/data'
 read_gh_rds <- function(x) {
-  url <- sprintf('%s/%ss.rds', base_gh_path, x)
+  url <- sprintf('%s/%s.rds', base_gh_path, x)
   res <- url %>% rds_from_url()
   cli::cli_alert_success(
     sprintf('Imported data from %s.', url)
