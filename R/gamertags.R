@@ -45,10 +45,7 @@ possibly_scrape_gamertags <- purrr::possibly(
 
 ## upon last checking, there are 482 players
 do_scrape_gamertags <- function(pages = 0:(ceiling(482/15)), update_time = Sys.time(), overwrite = TRUE) {
-  
-  cli::cli_alert_info(
-    'Scraping gamertags.'
-  )
+
   
   if(file.exists(path_gamertags) & !overwrite) {
     cli::cli_alert_info(
@@ -56,6 +53,10 @@ do_scrape_gamertags <- function(pages = 0:(ceiling(482/15)), update_time = Sys.t
     )
     return(import_csv(path_gamertags))
   }
+  
+  cli::cli_alert_info(
+    'Scraping gamertags.'
+  )
   
   gamertags <- pages %>% 
     stats::setNames(., .) %>% 

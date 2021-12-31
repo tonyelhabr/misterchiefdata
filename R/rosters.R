@@ -5,7 +5,9 @@
     lubridate::ymd()
 }
 
-
+.clean_player_id <- function(x) {
+  x # %>% tolower() %>% stringr::str_replace_all(' ', '_')
+}
 
 scrape_roster <- function(url) {
   team <- url %>% 
@@ -34,18 +36,115 @@ scrape_roster <- function(url) {
     }
   }
   
+  # new_pluck_table <- function(i) {
+  #   # i <- 2
+  #   trs <- table_elements[i] %>% rvest::html_elements('tr')
+  #   h <- trs %>% 
+  #     purrr::map_chr(
+  #       ~rvest::html_element(.x, 'th') %>% 
+  #         rvest::html_text2()
+  #     ) %>% 
+  #     purrr::pluck(1)
+  #   if(!str_detect(h, 'Active|Players')) {
+  #     return(tibble::tibble())
+  #   }
+  # 
+  #   status <- h %>% stringr::str_replace_all('(^.*)(\\s.*$)', '\\1') %>% tolower()
+  #   tds <- trs %>% purrr::map(~rvest::html_elements(.x, 'td'))
+  #   
+  #   .parse_row <- function(j) {
+  #     
+  #     td <- tds[[j]]
+  #     if(length(td) == 0) {
+  #       return(tibble::tibble())
+  #     }
+  #     td1 <- td[1]
+  #     id <- td1 %>% rvest::html_text2() %>% stringr::str_trim()
+  #     link <- td1 %>% 
+  #       rvest::html_elements('a') %>% 
+  #       rvest::html_attr('href') %>% 
+  #       purrr::pluck(2)
+  #     
+  #     player_url <- ifelse(
+  #       !is.na(link),
+  #       sprintf('https://liquipedia.net%s', link),
+  #       NA_character_
+  #     )
+  #     name <- td[2] %>% rvest::html_text2()
+  #     join_date <- td[3] %>% rvest::html_text2()
+  #     
+  #     player <- tibble::tibble(
+  #       id = id,
+  #       name = name,
+  #       player_url = as.character(player_url),
+  #       join_date = join_date
+  #     )
+  #     
+  #     if(length(td) > 3) {
+  #       player <- player %>% 
+  #         dplyr::mutate(
+  #           leave_date = td[4] %>% rvest::html_text2()
+  #         )
+  #     } 
+  #     
+  #     suppressWarnings(
+  #       player <- player %>% 
+  #         dplyr::mutate(
+  #           dplyr::across(.data$id, ~tolower(.x) %>% stringr::str_replace_all(' ', '_')),
+  #           status = !!status,
+  #           dplyr::across(.data$name, ~stringr::str_remove_all(.x, '^\\(|\\)|\\n') %>% stringr::str_trim()),
+  #           # seen an issue with the site where a date is missing the leading "2" for "20[12]x"
+  #           join_date2 = .data$join_date %>% paste0('2', .) %>% .clean_roster_date('join'),
+  #           dplyr::across(.data$join_date, ~.clean_roster_date(.x, 'join')),
+  #           dplyr::across(.data$join_date, ~dplyr::coalesce(.x, .data$join_date2))
+  #         )
+  #     )
+  #     
+  #     if(!any(names(player) == 'leave_date')) {
+  #       player <- player %>%
+  #         dplyr::mutate(
+  #           leave_date = lubridate::NA_Date_
+  #         )
+  #     }
+  #     
+  #     suppressWarnings(
+  #       player <- player %>% 
+  #         dplyr::mutate(
+  #           leave_date2 = paste0('2', .data$leave_date) %>% .clean_roster_date('leave'),
+  #           dplyr::across(.data$leave_date, ~.clean_roster_date(.x, 'leave')),
+  #           dplyr::across(.data$leave_date, ~dplyr::coalesce(.x, .data$leave_date))
+  #         )
+  #     )
+  #     
+  #     player %>% 
+  #       dplyr::select(
+  #         .data$id,
+  #         .data$name,
+  #         .data$join_date,
+  #         .data$leave_date
+  #       )
+  #   }
+  #   
+  #   rows <- seq_along(tds) %>% 
+  #     purrr::map_dfr(.parse_row)
+  # }
+  # 
+  # tbs <- seq_along(table_elements) %>% 
+  #   purrr::map_dfr(new_pluck_table)
+  # tbs
+  
   pluck_table <- function(i) {
-    table_init <- table_elements[i] %>% 
-      rvest::html_table() %>% 
-      purrr::pluck(1) %>% 
+    table_init <- table_elements[i] %>%
+      rvest::html_table() %>%
+      purrr::pluck(1) %>%
       janitor::remove_empty(which = 'cols')
-    
+
     old_names <- table_init %>% names()
-    
+
     if(!any(old_names[1] == c('Active Squad', 'Former Players'))) {
       return(tibble::tibble())
     }
-    
+
     if(nrow(table_init) == 1) {
       is_id <- table_init[1, 1] == 'ID'
       if(!is_id) {
@@ -58,34 +157,34 @@ scrape_roster <- function(url) {
       )
       return(tibble::tibble())
     }
-    
+
     first_row <- table_init[1, ] %>% c() %>% unname() %>% unlist()
-    tb <- table_init %>% 
-      stats::setNames(first_row) %>% 
-      dplyr::slice(c(2:dplyr::n())) %>% 
-      janitor::clean_names() %>% 
+    tb <- table_init %>%
+      stats::setNames(first_row) %>%
+      dplyr::slice(c(2:dplyr::n())) %>%
+      janitor::clean_names() %>%
       dplyr::mutate(
         table_name = old_names[1]
       )
   }
-  
-  roster_init <- 1:n_tables %>% 
+
+  roster_init <- 1:n_tables %>%
     purrr::map_dfr(pluck_table)
-  
-  # example: https://liquipedia.net/halo/Wrath 
+
+  # example: https://liquipedia.net/halo/Wrath
   if(nrow(roster_init) == 0) {
     cli::cli_alert_info(
       sprintf('No tables for %s.', team)
     )
     return(tibble::tibble())
   }
-  
+
   suppressWarnings(
-    roster <- 1:n_tables %>% 
-      purrr::map_dfr(pluck_table) %>% 
-      dplyr::mutate(scrape_method = !!scrape_method) %>%  
+    roster <- 1:n_tables %>%
+      purrr::map_dfr(pluck_table) %>%
+      dplyr::mutate(scrape_method = !!scrape_method) %>%
       dplyr::mutate(
-        dplyr::across(.data$id, ~tolower(.x) %>% stringr::str_replace_all(' ', '_')),
+        dplyr::across(.data$id, .clean_player_id),
         status = .data$table_name %>% stringr::str_replace_all('(^.*)(\\s.*$)', '\\1') %>% tolower(),
         dplyr::across(.data$name, ~stringr::str_remove_all(.x, '^\\(|\\)')),
         # seen an issue with the site where a date is missing the leading "2" for "20[12]x"
@@ -94,31 +193,30 @@ scrape_roster <- function(url) {
         dplyr::across(.data$join_date, ~dplyr::coalesce(.x, .data$join_date2))
       )
   )
-  
+
   if(!any(names(roster) == 'leave_date')) {
     roster <- roster %>%
       dplyr::mutate(
         leave_date = lubridate::NA_Date_
       )
   }
-  
+
   suppressWarnings(
-    roster <- roster %>% 
+    roster <- roster %>%
       dplyr::mutate(
         leave_date2 = paste0('2', .data$leave_date) %>% .clean_roster_date('leave'),
         dplyr::across(.data$leave_date, ~.clean_roster_date(.x, 'leave')),
         dplyr::across(.data$leave_date, ~dplyr::coalesce(.x, .data$leave_date))
       )
   )
-  
-  roster %>% 
+
+  roster %>%
     dplyr::select(
       .data$id,
       .data$status,
       .data$name,
       .data$join_date,
-      .data$leave_date,
-      .data$scrape_method
+      .data$leave_date
     )
 }
 
@@ -226,12 +324,16 @@ do_scrape_rosters <- function(teams, scrape_time, overwrite = TRUE) {
   }
   
   existing_teams <- teams %>% 
-    dplyr::filter(!is.na(.data$team_url))
+    dplyr::filter(!is.na(.data$team_url)) %>% 
+    dplyr::anti_join(
+      import_bad_urls('roster') %>% dplyr::rename(team_url = .data$url),
+      by = 'team_url'
+    )
   
   if(!rosters_exist | overwrite) {
     
     rosters <- existing_teams %>% scrape_new_rosters(scrape_time)
-
+    
   } else {
     existing_rosters <- import_csv(path_rosters)
     existing_roster_urls <- existing_rosters %>% 
@@ -240,10 +342,6 @@ do_scrape_rosters <- function(teams, scrape_time, overwrite = TRUE) {
     new_teams <- existing_teams %>% 
       dplyr::anti_join(
         existing_roster_urls,
-        by = 'team_url'
-      ) %>% 
-      dplyr::anti_join(
-        import_bad_urls('roster') %>% dplyr::rename(team_url = .data$url),
         by = 'team_url'
       )
     
@@ -322,7 +420,7 @@ do_scrape_rosters <- function(teams, scrape_time, overwrite = TRUE) {
       new_teams %>% dplyr::select(.data$team_url) ## doesn't matter if this has 0 rows
     ) %>% 
       scrape_new_rosters(scrape_time)
-
+    
     rosters <- dplyr::bind_rows(
       new_rosters,
       existing_rosters %>% dplyr::filter(!(.data$team_url %in% teams_to_update_w_urls$team_url))

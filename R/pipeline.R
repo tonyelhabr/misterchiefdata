@@ -51,6 +51,8 @@ update_data <- function(
   all_rosters <- all_teams %>% 
     do_scrape_rosters(
       scrape_time = t2,
+      ## FALSE because we want to be minimal about updating since we've already 
+      ## scraped rosters in the first pass
       overwrite = FALSE
     )
   
@@ -62,6 +64,10 @@ update_data <- function(
   
   t3 <- Sys.time()
   cli::cli_alert_success(
-    sprintf('Done updating data at %s (%s).', Sys.time(), t3 - t1)
+    sprintf(
+      'Done updating data at %s (%.0f seconds).', 
+      Sys.time(), 
+      as.numeric(t3 - t1, 'days') * 24 * 60 * 60
+    )
   )
 }

@@ -128,52 +128,69 @@ scrape_new_players <- function(rosters, scrape_time) {
     # but this logic works as of 2021-12-10
     dplyr::distinct(.data$id) %>% 
     dplyr::arrange(.data$id)
+
+  raw_players <- ids %>% 
+    dplyr::mutate(tournaments = purrr::map(.data$id, possibly_scrape_player))
   
-  players <- ids %>% 
-    dplyr::pull(.data$id) %>% 
-    stats::setNames(., .) %>% 
-    purrr::map_dfr(possibly_scrape_player, .id = 'id')
-  players
-  
-  res <- ids %>% 
-    dplyr::left_join(players, by = 'id')
-  
-  res$scrape_time <- scrape_time
-  res
+  raw_players$scrape_time <- scrape_time
+  raw_players
+}
+
+clean_players <- function(raw_players) {
+  raw_players %>% 
+    dplyr::filter(
+      purrr::map_int(.data$tournaments, nrow) > 0
+    )
 }
 
 do_scrape_players <- function(rosters, scrape_time, overwrite = FALSE) {
   
   cli::cli_alert_info('Scraping players.')
   
+  raw_players_exist <- file.exists(path_raw_players)
   players_exist <- file.exists(path_players)
   
-  if(!players_exist) {
+  if(!raw_players_exist | !players_exist) {
     cli::cli_alert_info(
-      sprintf('%s does not exist! Must scrape all players.', path_players)
+      sprintf('%s or %s does not exist! Must scrape all players.', path_raw_players, path_players)
     )
   }
   
-  if(!players_exist | overwrite) {
+  ## this is sort of analogous to transfers (pages that we scrape and don't save)
+  ## although i've named this with `do_`, almost implying that there should be something saved.
+  ## we always need to update player ids, but that isn't the case with the transfers page, 
+  ## which is the key difference.
+  ## not sure how i feel about this design pattern.
+  player_ids <- do_scrape_player_ids()
+  
+  if(!raw_players_exist | !players_exist | overwrite) {
     
     cli::cli_alert_info(
       'Scraping all players.'
     )
     
-    players <- rosters %>% scrape_new_players(scrape_time)
+    raw_players <- dplyr::bind_rows(
+      rosters,
+      player_ids
+    ) %>% 
+      scrape_new_players(scrape_time)
     
   } else {
-    existing_players <- import_csv(path_players)
+    existing_raw_players <- readr::read_rds(path_raw_players)
     
-    existing_player_ids <- existing_players %>% 
+    existing_raw_player_ids <- existing_raw_players %>% 
       dplyr::distinct(.data$id)
     
     roster_player_ids <- rosters %>% 
       dplyr::distinct(.data$id)
-    
+   
     new_player_ids <- roster_player_ids %>% 
       dplyr::anti_join(
-        existing_player_ids,
+        existing_raw_player_ids,
+        by = 'id'
+      ) %>% 
+      dplyr::anti_join(
+        player_ids,
         by = 'id'
       )
     
@@ -195,7 +212,7 @@ do_scrape_players <- function(rosters, scrape_time, overwrite = FALSE) {
     }
     
     if(!has_new_players & !has_new_roster_players) {
-      return(existing_players)
+      return(existing_raw_players)
     }
     
     new_players <- dplyr::bind_rows(
@@ -206,10 +223,12 @@ do_scrape_players <- function(rosters, scrape_time, overwrite = FALSE) {
     
     players <- dplyr::bind_rows(
       new_players,
-      existing_players %>% dplyr::filter(!(.data$id %in% new_players$id))
+      existing_raw_players %>% dplyr::filter(!(.data$id %in% new_players$id))
     )
   }
   
+  readr::write_rds(raw_players, path_raw_players)
+  players <- raw_players %>% clean_players()
   export_csv(players, path_players)
   cli::cli_alert_success('Done scraping players.')
   players

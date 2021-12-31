@@ -58,8 +58,9 @@ do_update_teams <- function(brackets, update_time) {
   
   teams_init <- brackets %>% 
     dplyr::select(tourney_url = .data$url, .data$teams) %>% 
-    dplyr::mutate(
-      teams = purrr::map(.data$teams, ~dplyr::mutate(.x, dplyr::across(dplyr::everything(), as.character)))
+    ## i get a "can't combine... error at the unnest if i don't do this
+    dplyr::filter(
+      purrr::map_int(.data$teams, nrow) > 0
     ) %>% 
     tidyr::unnest(cols = .data$teams) %>% 
     dplyr::rename(team_url = .data$url, url = .data$tourney_url) %>% 

@@ -3,6 +3,8 @@ do_insert_player_derived_brackets <- function(players, scrape_time) {
   existing_raw_brackets <- readr::read_rds(path_raw_brackets)
   existing_tournaments <- import_csv(path_tournaments)
   player_tournament_urls <- players %>%
+    dplyr::select(.data$tournaments) %>% 
+    tidyr::unnest(.data$tournaments) %>% 
     dplyr::distinct(.data$url) %>% 
     dplyr::filter(!is.na(.data$url))
   
@@ -32,8 +34,9 @@ do_insert_player_derived_brackets <- function(players, scrape_time) {
 
   all_raw_brackets <- dplyr::bind_rows(
     existing_raw_brackets,
-    new_raw_brackets #  %>% dplyr::filter(!(.data$url %in% existing_raw_brackets$url))
+    new_raw_brackets
   ) %>% 
+    ## don't think i need this, but whatever
     dplyr::group_by(.data$url) %>% 
     dplyr::slice_max(.data$scrape_time, n = 1, with_ties = FALSE) %>% 
     dplyr::ungroup()

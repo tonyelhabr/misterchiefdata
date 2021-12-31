@@ -366,7 +366,7 @@ do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
   
   if(!brackets_exist) {
     cli::cli_alert_info(
-      sprintf('%s or %s does not exist! Must scrape all brackets.', path_raw_brackets, path_brackets)
+      sprintf('%s or %s does not exist!', path_raw_brackets, path_brackets)
     )
   }
   
@@ -385,7 +385,7 @@ do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
     raw_brackets <- bracket_urls %>% scrape_new_brackets(scrape_time)
 
   } else {
-    existing_brackets <- readr::read_rds(path_raw_brackets)
+    existing_raw_brackets <- readr::read_rds(path_raw_brackets)
     
     ## todo: use bracket_urls here?!?
     
@@ -395,7 +395,7 @@ do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
       cli::cli_alert_success(
         'No new brackets to scrape based on scrape time.'
       )
-      return(existing_brackets)
+      return(existing_raw_brackets)
     }
     
     cli::cli_alert_info(
@@ -410,7 +410,7 @@ do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
 
     raw_brackets <- dplyr::bind_rows(
       new_brackets,
-      existing_brackets %>% 
+      existing_raw_brackets %>% 
         dplyr::filter(!(.data$url %in% new_urls$url))
     )
   }
