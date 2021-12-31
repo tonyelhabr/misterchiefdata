@@ -60,7 +60,7 @@ do_update_teams <- function(brackets, update_time) {
     dplyr::select(tourney_url = .data$url, .data$teams) %>% 
     ## i get a "can't combine... error at the unnest if i don't do this
     dplyr::filter(
-      purrr::map_int(.data$teams, nrow) > 0
+      purrr::map_int(.data$teams, nrow) > 0L
     ) %>% 
     tidyr::unnest(cols = .data$teams) %>% 
     dplyr::rename(team_url = .data$url, url = .data$tourney_url) %>% 

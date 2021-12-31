@@ -406,10 +406,10 @@ do_scrape_brackets <- function(tournaments, scrape_time, overwrite = FALSE) {
       cli::cli_li
     )
     
-    new_brackets <- new_urls %>% scrape_new_brackets(scrape_time)
+    new_raw_brackets <- new_urls %>% scrape_new_brackets(scrape_time)
 
     raw_brackets <- dplyr::bind_rows(
-      new_brackets,
+      new_raw_brackets,
       existing_raw_brackets %>% 
         dplyr::filter(!(.data$url %in% new_urls$url))
     )
