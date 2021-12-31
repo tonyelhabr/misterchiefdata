@@ -47,24 +47,3 @@ do_insert_player_derived_brackets <- function(players, scrape_time) {
   cli::cli_alert_success('Done scraping brackets.')
   all_brackets
 }
-
-## i don't think i need to do this at all. the tournaments csv shouldn't be used. instead, the
-## tournament urls should be inferred from brackets
-# update_tournaments <- function(raw_brackets = NULL, tournaments = NULL) {
-#   if(is.null(brackets)) {
-#     raw_brackets <- readr::read_rds(path_raw_brackets)
-#   }
-#   if(is.null(tournaments)) {
-#     tournaments <- import_csv(path_tournaments)
-#   }
-#   
-#   new_tournament_urls <- raw_brackets %>% 
-#     dplyr::distinct(.data$url) %>% 
-#     dplyr::anti_join(
-#       tournaments %>% 
-#         dplyr::distinct(.data$url),
-#       by = 'url'
-#     )
-#   ## todo...
-# }
-
