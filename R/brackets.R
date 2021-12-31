@@ -1,8 +1,19 @@
 
 .get_teams_from_series_element <- function(series_element) {
   names <- series_element %>% rvest::html_elements('.name')
-  idx_teams <- names %>% 
-    rvest::html_attr('style') %>% 
+  teams <- names %>% 
+    rvest::html_elements('a') %>% 
+    rvest::html_attr('title') %>% 
+    stringr::str_remove(' \\(page does not exist\\)')
+
+  if(length(teams) > 0) {
+
+    return(teams)
+  }
+
+  ## old way
+  idx_teams <- names %>%
+    rvest::html_attr('style') %>%
     stringr::str_which('overflow:hidden;text-overflow:ellipsis;white-space:pre')
   names[idx_teams] %>% rvest::html_text2()
 }
@@ -117,7 +128,7 @@
   
 }
 
-.parse_pool_play_series_result <- function(pool_element) {
+.parse_pool_series_result <- function(pool_element) {
   
   teams <- pool_element %>% 
     rvest::html_elements(
@@ -274,8 +285,8 @@ scrape_bracket <- function(url) {
       pool_elements,
       ... =
     )
-    pool_series_matches <- do_pool(.parse_bracket_series_matches)
-    pool_series_results <- do_pool(.parse_bracket_series_result)
+    pool_series_matches <- do_pool(.parse_pool_series_matches)
+    pool_series_results <- do_pool(.parse_pool_series_result)
   }
   
   
