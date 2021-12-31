@@ -139,8 +139,23 @@ scrape_new_players <- function(rosters, scrape_time) {
 clean_players <- function(raw_players) {
   raw_players %>% 
     dplyr::filter(
-      purrr::map_int(.data$tournaments, nrow) > 0
-    )
+      purrr::map_int(.data$tournaments, nrow) > 0L
+    ) %>% 
+    ## deal with duplicates like Ogre 2 and Ogre2
+    dplyr::mutate(
+      pseudo_id = dplyr::coalesce(.data$player_url, .data$id)
+    ) %>% 
+    dplyr::group_by(
+      .data$pseudo_id
+    ) %>% 
+    dplyr::slice_max(
+      .data$scrape_time,
+      n = 1,
+      ## 2 names might have the same scrape time, but this guarantees just 1 returned result
+      with_ties = FALSE
+    ) %>% 
+    dplyr::ungroup() %>% 
+    dplyr::select(-.data$pseudo_id)
 }
 
 do_scrape_players <- function(rosters, scrape_time, overwrite = FALSE) {
@@ -215,17 +230,28 @@ do_scrape_players <- function(rosters, scrape_time, overwrite = FALSE) {
       return(existing_raw_players)
     }
     
-    new_players <- dplyr::bind_rows(
+    new_raw_players <- dplyr::bind_rows(
       new_rosters %>% dplyr::distinct(.data$id), ## must have >0 rows
       new_player_ids %>% dplyr::distinct(.data$id) ## doesn't matter if this has 0 rows
     ) %>% 
       scrape_new_players(scrape_time)
     
-    players <- dplyr::bind_rows(
-      new_players,
+    raw_players <- dplyr::bind_rows(
+      new_raw_players,
       existing_raw_players %>% dplyr::filter(!(.data$id %in% new_players$id))
     )
   }
+  
+  raw_players <- raw_players %>% 
+    dplyr::left_join(player_ids, by = 'id') %>% 
+    dplyr::select(
+      .data$player_url,
+      .data$id,
+      .data$name,
+      .data$continent,
+      .data$tournaments,
+      .data$scrape_time
+    )
   
   readr::write_rds(raw_players, path_raw_players)
   players <- raw_players %>% clean_players()
