@@ -1,10 +1,9 @@
 ^canzhi\.Rproj$
 ^\.Rproj\.user$
 ^data-raw$
-^dev$
-^queries$
 ^LICENSE\.md$
 data/raw_brackets.rds
+data/raw_players.rds
 data/brackets.rds
 data/players.csv
 data/rosters.csv
