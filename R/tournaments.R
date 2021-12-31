@@ -314,6 +314,7 @@ do_scrape_tournaments <- function(scrape_time, overwrite = FALSE) {
     tournaments <- dplyr::bind_rows(
       new_tournaments,
       existing_tournaments %>% 
+        ## do need this filter because scraping by tiers re-scrapes some tournaments
         dplyr::filter(!(.data$url %in% new_recent_tournaments$url))
     )
 

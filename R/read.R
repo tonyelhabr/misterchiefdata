@@ -1,4 +1,5 @@
 
+#' @importFrom memoise memoise
 .import_bad_urls <- memoise::memoise({function() {
   import_csv('data-raw/bad_urls.csv')
 }})

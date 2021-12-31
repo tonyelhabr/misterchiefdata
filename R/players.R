@@ -238,7 +238,7 @@ do_scrape_players <- function(rosters, scrape_time, overwrite = FALSE) {
     
     raw_players <- dplyr::bind_rows(
       new_raw_players,
-      existing_raw_players %>% dplyr::filter(!(.data$id %in% new_players$id))
+      existing_raw_players %>% dplyr::filter(!(.data$id %in% new_raw_players$id)) ## don't actually need this filter
     )
   }
   
