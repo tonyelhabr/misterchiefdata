@@ -5,7 +5,7 @@
 data/raw_brackets.rds
 data/raw_players.rds
 data/brackets.rds
-data/players.csv
+data/players.rds
 data/rosters.csv
 data/teams.csv
 data/tournaments.csv
