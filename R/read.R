@@ -33,12 +33,8 @@ rds_from_url <- function(url) {
 }
 
 base_gh_path <- 'https://github.com/tonyelhabr/halo-data/raw/master/data'
-#' Read in professional Halo bracket data
-#' 
-#' @export
-#' @source <https://liquipedia.net>
-read_halo_brackets <- function() {
-  url <- sprintf('%s/brackets.rds', base_gh_path)
+read_gh_rds <- function(x) {
+  url <- sprintf('%s/%ss.rds', base_gh_path, x)
   res <- url %>% rds_from_url()
   cli::cli_alert_success(
     sprintf('Imported data from %s.', url)
@@ -55,12 +51,20 @@ read_gh_csv <- function(x) {
   res
 }
 
+#' Read in professional Halo bracket data
+#' 
+#' @export
+#' @source <https://liquipedia.net>
+read_halo_brackets <- function() {
+  read_gh_rds('brackets')
+}
+
 #' Read in professional Halo player data
 #' 
 #' @export
 #' @source <https://liquipedia.net>
 read_halo_players <- function() {
-  read_gh_csv('players')
+  read_gh_rds('players')
 }
 
 #' Read in professional Halo roster data

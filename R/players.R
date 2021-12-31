@@ -255,7 +255,7 @@ do_scrape_players <- function(rosters, scrape_time, overwrite = FALSE) {
   
   readr::write_rds(raw_players, path_raw_players)
   players <- raw_players %>% clean_players()
-  export_csv(players, path_players)
+  readr::write_rds(players, path_players)
   cli::cli_alert_success('Done scraping players.')
   players
   
