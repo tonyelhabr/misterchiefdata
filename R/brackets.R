@@ -227,7 +227,7 @@
       rvest::html_text2(),
     # team_title = team_elements %>% 
     #   rvest::html_attr('title'),
-    url = ifelse(stringr::str_detect(urls, "index[.]php?"), NA_character_, urls)
+    team_url = ifelse(stringr::str_detect(urls, "index[.]php?"), NA_character_, urls)
   )
 }
 

@@ -83,6 +83,16 @@ read_halo_teams <- function() {
   read_gh_csv('teams')
 }
 
+#' Read in professional Halo tournament data
+#' 
+#' Note that this CSV may not cover all the tournaments implied by the brackets
+#' 
+#' @export
+#' @source <https://liquipedia.net>
+read_halo_tournaments <- function() {
+  read_gh_csv('tournaments')
+}
+
 #' Read in professional Halo team data
 #' 
 #' @export
